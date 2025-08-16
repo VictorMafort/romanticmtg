@@ -3,13 +3,22 @@ import requests
 
 # Allowed sets for Romantic format
 allowed_sets = {
-    "8ED", "MRD", "DST", "5DN", "CHK", "BOK", "SOK",
-    "9ED", "RAV", "GPT", "DIS", "CSP", "TSP", "TSB", "PLC", "FUT",
-    "10E", "LRW", "MOR", "SHM", "EVE",
+    "8ED", 
+    "MRD", "DST", "5DN",
+    "CHK", "BOK", "SOK",
+    "9ED", 
+    "RAV", "GPT", "DIS",
+    "CSP", "TSP", "TSB", "PLC", "FUT",
+    "10E",
+    "LRW", "MOR", "SHM", "EVE",
     "ALA", "CON", "ARB",
-    "M10", "ZEN", "WWK", "ROE",
-    "M11", "SOM", "MBS", "NPH",
-    "M12", "ISD", "DKA", "AVR", "M13"
+    "M10", 
+    "ZEN", "WWK", "ROE",
+    "M11",
+    "SOM", "MBS", "NPH",
+    "M12",
+    "ISD", "DKA", "AVR",
+    "M13"
 }
 
 # Banned cards
@@ -131,4 +140,5 @@ with tab2:
             if status_type == "warning":
                 with st.expander(f"🗒️ Print sets for {name} (debug)"):
                     st.write(sorted(sets))
+
 
