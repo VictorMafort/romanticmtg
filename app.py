@@ -34,11 +34,6 @@ def fetch_card_data(card_name):
         return None
 
     data = resp.json()
-
-    # Ignora se a carta principal for um token
-    if "Token" in data.get("type_line", ""):
-        return None
-
     all_sets = set()
     next_page = data["prints_search_uri"]
 
@@ -48,7 +43,6 @@ def fetch_card_data(card_name):
             break
         j = p.json()
         for c in j["data"]:
-            # Ignora versões que são tokens
             if "Token" not in c.get("type_line", ""):
                 all_sets.add(c["set"].upper())
         next_page = j.get("next_page", None)
@@ -90,7 +84,7 @@ with tab1:
             card = fetch_card_data(card_input)
 
         if not card:
-            st.error("Carta não encontrada ou é apenas um token.")
+            st.error("Card not found.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
@@ -125,7 +119,7 @@ with tab2:
                 name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
                 card = fetch_card_data(name_guess)
                 if not card:
-                    results.append((line, "❌ Not Found or Token", "danger", None))
+                    results.append((line, "❌ Card not found", "danger", None))
                 else:
                     status_text, status_type = check_legality(card["name"], card["sets"])
                     results.append((card["name"], status_text, status_type, card["sets"]))
