@@ -1,14 +1,19 @@
 import streamlit as st
 import requests
 
-# Sets permitidos (baseado no seu filtro Scryfall)
-sets_permitidos = {
-    "M13", "AVR", "DKA", "ISD", "M12", "NPH", "MBS", "SOM", "M11", "ROE",
-    "WWK", "ZEN", "M10", "ARB", "CON", "ALA", "EVE", "SHM", "MOR", "LRW",
-    "10E", "FUT", "PLC", "TSP", "CSP", "DIS", "GPT", "RAV", "9E", "SOK", "8E"
+# Allowed sets for Romantic format
+allowed_sets = {
+    "8ED", "MRD", "DST", "5DN", "CHK", "BOK", "SOK",
+    "9ED", "RAV", "GPT", "DIS", "CSP", "TSP", "PLC", "FUT",
+    "10E", "LRW", "MOR", "SHM", "EVE",
+    "ALA", "CON", "ARB",
+    "M10", "ZEN", "WWK", "ROE",
+    "M11", "SOM", "MBS", "NPH",
+    "M12", "ISD", "DKA", "AVR", "M13"
 }
 
-# Ban list atual
+
+# Banned cards
 ban_list = {
     "Gitaxian Probe",
     "Mental Misstep",
@@ -16,50 +21,109 @@ ban_list = {
     "Skullclamp"
 }
 
-# Função para buscar impressões reais da carta
-def buscar_impressoes_reais(carta):
-    sets_encontrados = set()
-    url_nome = f"https://api.scryfall.com/cards/named?fuzzy={carta}"
-    resposta_nome = requests.get(url_nome)
-    if resposta_nome.status_code != 200:
-        return None, None
-    dados_nome = resposta_nome.json()
-    nome_padrao = dados_nome["name"]
-    url_prints = dados_nome["prints_search_uri"]
+def fetch_card_data(card_name):
+    """Busca dados completos da carta, incluindo todos os sets onde ela foi impressa."""
+    url = f"https://api.scryfall.com/cards/named?fuzzy={card_name}"
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        return None
 
-    while url_prints:
-        resposta = requests.get(url_prints)
-        if resposta.status_code != 200:
-            return None, None
-        dados = resposta.json()
-        for card in dados["data"]:
-            sets_encontrados.add(card["set"].upper())
-        url_prints = dados.get("next_page", None)
+    data = resp.json()
+    all_sets = set()
+    next_page = data["prints_search_uri"]
 
-    return sets_encontrados, nome_padrao
+    # Pega todas as páginas de prints
+    while next_page:
+        p = requests.get(next_page)
+        if p.status_code != 200:
+            break
+        j = p.json()
+        for c in j["data"]:
+            all_sets.add(c["set"].upper())
+        next_page = j.get("next_page", None)
 
-# Função para verificar legalidade
-def verificar_legalidade(nome_carta, sets_da_carta):
-    if nome_carta in ban_list:
-        return "❌ Banned"
-    elif sets_da_carta & sets_permitidos:
-        sets_validos = sets_da_carta & sets_permitidos
-        return f"✅ Legal (printed in: {', '.join(sorted(sets_validos))})"
-    else:
-        return f"⚠️ Not Legal"
+    return {
+        "name": data["name"],
+        "sets": all_sets,
+        "image": data.get("image_uris", {}).get("normal", None),
+        "type": data.get("type_line", ""),
+        "mana": data.get("mana_cost", ""),
+        "oracle": data.get("oracle_text", "")
+    }
 
-# Interface Streamlit
-st.set_page_config(page_title="Romantic Legality Checker", page_icon="🧙", layout="centered")
-st.title("🔍 Romantic Legality Checker")
-st.caption("Checks the legality of a card in the Romantic format")
+def check_legality(name, sets):
+    """Retorna (status_text, status_color_key)."""
+    if name in ban_list:
+        return "❌ Banned", "danger"
+    if sets & allowed_sets:
+        return "✅ Legal", "success"
+    return "⚠️ Not Legal", "warning"
 
-carta = st.text_input("Digite o nome da carta:")
+# --- UI ---
+st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
+st.title("🧙 Romantic Format Tools")
+tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-if carta:
-    with st.spinner("Consultando Scryfall..."):
-        sets_da_carta, nome_corrigido = buscar_impressoes_reais(carta)
-    if sets_da_carta:
-        status = verificar_legalidade(nome_corrigido, sets_da_carta)
-        st.success(f"{nome_corrigido}: {status}")
-    else:
-        st.error("Carta não encontrada no Scryfall.")
+# Tab 1: Single Card Checker
+with tab1:
+    card_input = st.text_input("Enter a card name:")
+    if card_input:
+        with st.spinner("Fetching card data..."):
+            card = fetch_card_data(card_input)
+
+        if not card:
+            st.error("Card not found on Scryfall.")
+        else:
+            status_text, status_type = check_legality(card["name"], card["sets"])
+            # Exibe apenas o status colorido
+            if status_type == "success":
+                st.markdown(f"{card['name']}: <span style='color:green'>{status_text}</span>", unsafe_allow_html=True)
+            elif status_type == "warning":
+                st.markdown(f"{card['name']}: <span style='color:orange'>{status_text}</span>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"{card['name']}: <span style='color:red'>{status_text}</span>", unsafe_allow_html=True)
+
+            # Imagem
+            if card["image"]:
+                cols = st.columns([1,2,1])
+                with cols[1]:
+                    st.image(card["image"], caption=card["name"], width=300)
+
+            # Detalhes
+            with st.expander("📋 Card Details"):
+                st.markdown(f"**Type:** {card['type']}")
+                st.markdown(f"**Mana Cost:** {card['mana']}")
+                st.markdown(f"**Oracle Text:** {card['oracle']}")
+
+            # Se saiu Not Legal, mostra os sets encontrados
+            if status_type == "warning":
+                with st.expander("🗒️ Print sets found (for debugging)"):
+                    st.write(sorted(card["sets"]))
+
+# Tab 2: Decklist Checker
+with tab2:
+    st.write("Paste your decklist below (one card per line, with or without quantity):")
+    deck_input = st.text_area("Decklist", height=300)
+
+    if deck_input:
+        lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
+        results = []
+
+        with st.spinner("Checking decklist..."):
+            for line in lines:
+                parts = line.split(" ", 1)
+                name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
+                card = fetch_card_data(name_guess)
+                if not card:
+                    results.append((line, "❌ Not Found", "danger", None))
+                else:
+                    status_text, status_type = check_legality(card["name"], card["sets"])
+                    results.append((card["name"], status_text, status_type, card["sets"]))
+
+        st.subheader("📋 Decklist Results:")
+        for name, status_text, status_type, sets in results:
+            color = {"success":"green", "warning":"orange", "danger":"red"}[status_type]
+            st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
+            if status_type == "warning":
+                with st.expander(f"🗒️ Print sets for {name} (debug)"):
+                    st.write(sorted(sets))
