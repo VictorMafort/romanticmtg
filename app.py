@@ -43,7 +43,7 @@ def fetch_card_data(card_name):
             break
         j = p.json()
         for c in j["data"]:
-	if "Token" not in c.get("type_line", ""):
+			if "Token" not in c.get("type_line", ""):
             all_sets.add(c["set"].upper())
         next_page = j.get("next_page", None)
 
@@ -131,3 +131,4 @@ with tab2:
             if status_type == "warning":
                 with st.expander(f"🗒️ Print sets for {name} (debug)"):
                     st.write(sorted(sets))
+
