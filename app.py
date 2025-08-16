@@ -4,7 +4,7 @@ import requests
 # Allowed sets for Romantic format
 allowed_sets = {
     "8ED", "MRD", "DST", "5DN", "CHK", "BOK", "SOK",
-    "9ED", "RAV", "GPT", "DIS", "CSP", "TSP", "PLC", "FUT",
+    "9ED", "RAV", "GPT", "DIS", "CSP", "TSP", "TSB", "PLC", "FUT",
     "10E", "LRW", "MOR", "SHM", "EVE",
     "ALA", "CON", "ARB",
     "M10", "ZEN", "WWK", "ROE",
@@ -131,3 +131,4 @@ with tab2:
             if status_type == "warning":
                 with st.expander(f"🗒️ Print sets for {name} (debug)"):
                     st.write(sorted(sets))
+
