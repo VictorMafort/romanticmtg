@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-from streamlit_searchbox import st_searchbox
 
 # Allowed sets for Romantic format
 allowed_sets = {
@@ -70,13 +69,21 @@ tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
 # Tab 1: Single Card Checker
 with tab1:
-    card_input = st_searchbox("Search for a card:", buscar_sugestoes)
+    card_input = st.text_input("Digite o nome da carta:")
+    
+    if card_input and len(card_input) >= 3:
+        sugestoes = buscar_sugestoes(card_input)
+        if sugestoes:
+            st.caption("🔍 Sugestões:")
+            for s in sugestoes[:5]:
+                st.markdown(f"- {s}")
+
     if card_input:
-        with st.spinner("Fetching card data..."):
+        with st.spinner("Consultando Scryfall..."):
             card = fetch_card_data(card_input)
 
         if not card:
-            st.error("Card not found on Scryfall.")
+            st.error("Carta não encontrada no Scryfall.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
