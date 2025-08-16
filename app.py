@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from streamlit_searchbox import st_searchbox
 
 # Allowed sets for Romantic format
 allowed_sets = {
@@ -12,7 +13,6 @@ allowed_sets = {
     "M12", "ISD", "DKA", "AVR", "M13"
 }
 
-
 # Banned cards
 ban_list = {
     "Gitaxian Probe",
@@ -21,8 +21,14 @@ ban_list = {
     "Skullclamp"
 }
 
+def buscar_sugestoes(query):
+    url = f"https://api.scryfall.com/cards/autocomplete?q={query}"
+    r = requests.get(url)
+    if r.status_code == 200:
+        return r.json()["data"]
+    return []
+
 def fetch_card_data(card_name):
-    """Busca dados completos da carta, incluindo todos os sets onde ela foi impressa."""
     url = f"https://api.scryfall.com/cards/named?fuzzy={card_name}"
     resp = requests.get(url)
     if resp.status_code != 200:
@@ -32,7 +38,6 @@ def fetch_card_data(card_name):
     all_sets = set()
     next_page = data["prints_search_uri"]
 
-    # Pega todas as páginas de prints
     while next_page:
         p = requests.get(next_page)
         if p.status_code != 200:
@@ -52,7 +57,6 @@ def fetch_card_data(card_name):
     }
 
 def check_legality(name, sets):
-    """Retorna (status_text, status_color_key)."""
     if name in ban_list:
         return "❌ Banned", "danger"
     if sets & allowed_sets:
@@ -66,7 +70,7 @@ tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
 # Tab 1: Single Card Checker
 with tab1:
-    card_input = st.text_input("Enter a card name:")
+    card_input = st_searchbox("Search for a card:", buscar_sugestoes)
     if card_input:
         with st.spinner("Fetching card data..."):
             card = fetch_card_data(card_input)
@@ -75,27 +79,19 @@ with tab1:
             st.error("Card not found on Scryfall.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
-            # Exibe apenas o status colorido
-            if status_type == "success":
-                st.markdown(f"{card['name']}: <span style='color:green'>{status_text}</span>", unsafe_allow_html=True)
-            elif status_type == "warning":
-                st.markdown(f"{card['name']}: <span style='color:orange'>{status_text}</span>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"{card['name']}: <span style='color:red'>{status_text}</span>", unsafe_allow_html=True)
+            color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+            st.markdown(f"{card['name']}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
 
-            # Imagem
             if card["image"]:
-                cols = st.columns([1,2,1])
+                cols = st.columns([1, 2, 1])
                 with cols[1]:
                     st.image(card["image"], caption=card["name"], width=300)
 
-            # Detalhes
             with st.expander("📋 Card Details"):
                 st.markdown(f"**Type:** {card['type']}")
                 st.markdown(f"**Mana Cost:** {card['mana']}")
                 st.markdown(f"**Oracle Text:** {card['oracle']}")
 
-            # Se saiu Not Legal, mostra os sets encontrados
             if status_type == "warning":
                 with st.expander("🗒️ Print sets found (for debugging)"):
                     st.write(sorted(card["sets"]))
@@ -122,7 +118,7 @@ with tab2:
 
         st.subheader("📋 Decklist Results:")
         for name, status_text, status_type, sets in results:
-            color = {"success":"green", "warning":"orange", "danger":"red"}[status_type]
+            color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             if status_type == "warning":
                 with st.expander(f"🗒️ Print sets for {name} (debug)"):
