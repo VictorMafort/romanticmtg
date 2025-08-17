@@ -129,12 +129,12 @@ st.markdown("""
 <style>
 .sug-card {
   display: block;
-  background: #f6f6f6;
-  border: 1px solid #d0d0d0;
+  background: transparent; /* fundo transparente */
+  border: 1px solid transparent; /* borda some até o hover */
   border-radius: 8px;
   padding: 4px;
   text-decoration: none !important;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
 }
 .sug-card img {
   width: 100%;
@@ -142,8 +142,10 @@ st.markdown("""
   border-radius: 6px;
 }
 .sug-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+  border-color: rgba(255, 215, 0, 0.6); /* dourado suave */
+  background-color: rgba(255, 255, 255, 0.04); /* leve véu no hover */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -235,6 +237,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
