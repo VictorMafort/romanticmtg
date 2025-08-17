@@ -219,6 +219,7 @@ except Exception:
 with tab1:
     st.subheader("🔍 Buscar e Adicionar Cartas")
 
+    # Campo de busca
     search_query = st.text_input("Digite o nome da carta")
 
     if search_query:
@@ -241,12 +242,12 @@ with tab1:
                     if card_data.get("image"):
                         col1.image(card_data["image"], use_column_width=True)
                     elif card_data.get("card_faces"):
-                        # Pega a imagem da primeira face no caso de dupla face
+                        # Caso de cartas dupla face
                         face_img = card_data["card_faces"][0].get("image_uris", {}).get("normal")
                         if face_img:
                             col1.image(face_img, use_column_width=True)
 
-                # Botão de adicionar (key inclui quantidade atual)
+                # Botão de adicionar carta
                 if col2.button(
                     "➕",
                     key=f"add_{card}_{st.session_state.deck.get(card, 0)}"
@@ -256,7 +257,7 @@ with tab1:
         else:
             st.warning("Nenhuma carta encontrada.")
     else:
-        st.info("Digite parte do nome de
+        st.info("Digite parte do nome de uma carta para buscar no catálogo.")
 # =========================
 # Tab 2
 # =========================
@@ -322,6 +323,7 @@ with tab3:
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.experimental_rerun()
+
 
 
 
