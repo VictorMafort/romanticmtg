@@ -31,14 +31,12 @@ ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 # =========================
 def buscar_sugestoes(query):
     try:
-        # Prefixo primeiro
         url_prefix = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
         r = requests.get(url_prefix, timeout=8)
         if r.status_code == 200:
             data = [s for s in r.json().get("data", []) if "token" not in s.lower()]
             if data:
                 return data
-        # Fallback geral
         url_any = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
         r2 = requests.get(url_any, timeout=8)
         if r2.status_code == 200:
@@ -62,8 +60,6 @@ def fetch_card_data(card_name):
         return None
 
     all_sets = set()
-
-    # Busca rápida limitada aos sets permitidos
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
     try:
@@ -83,7 +79,6 @@ def fetch_card_data(card_name):
     except:
         pass
 
-    # Busca completa por prints (early stop se achar set permitido)
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -124,55 +119,19 @@ def check_legality(name, sets):
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS básico para caixinhas clicáveis
-st.markdown("""
-<style>
-.sug-card {
-  background-color: #f6f6f6;
-  border: 1px solid #d0d0d0;
-  border-radius: 10px;
-  padding: 4px;
-  transition: transform .05s ease, box-shadow .1s ease;
-  display: block;
-  text-decoration: none !important;
-}
-.sug-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,.15);
-}
-.sug-card img {
-  width: 100%;
-  border-radius: 6px;
-  display: block;
-}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
-
-# Captura de clique via query param (?pick=Nome)
-picked = None
-try:
-    params = st.experimental_get_query_params()
-    if "pick" in params and params["pick"]:
-        picked = params["pick"][0]
-        # limpa o pick da URL pra não ficar preso
-        st.experimental_set_query_params()
-except Exception:
-    pass
 
 # =========================
 # Tab 1
 # =========================
 with tab1:
-    query = st.text_input("Digite o começo do nome da carta:", value=picked or "")
-    card_input = picked or None
+    query = st.text_input("Digite o começo do nome da carta:")
+    card_input = st.session_state.get("picked_card", query.strip())
 
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
 
-        # Monta thumbs (até 6 pra ficar bonito em grid)
         thumbs = []
         for nome in sugestoes[:6]:
             data = fetch_card_data(nome)
@@ -183,12 +142,11 @@ with tab1:
             st.caption("🔍 Sugestões:")
             cols = st.columns(len(thumbs))
             for idx, (nome, img) in enumerate(thumbs):
-                href = f"?pick={urllib.parse.quote(nome)}"
-                html = f'<a class="sug-card" href="{href}"><img src="{img}" alt="{nome}"/></a>'
-                cols[idx].markdown(html, unsafe_allow_html=True)
-
-    if not card_input:
-        card_input = query.strip()
+                with cols[idx]:
+                    st.image(img, caption=nome, use_column_width=True)
+                    if st.button(f"Selecionar {nome}", key=f"sug_{idx}"):
+                        st.session_state["picked_card"] = nome
+                        st.experimental_rerun()
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
