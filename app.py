@@ -172,9 +172,9 @@ with tab1:
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
 
-        # Monta thumbs com legalidade
+        # Monta até 20 thumbs com legalidade
         thumbs = []
-        for nome in sugestoes[:6]:
+        for nome in sugestoes[:20]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
                 status_text, status_type = check_legality(data["name"], data["sets"])
@@ -182,19 +182,22 @@ with tab1:
 
         if thumbs:
             st.caption("🔍 Sugestões:")
-            cols = st.columns(len(thumbs))
-            for idx, (nome, img, status_text, status_type) in enumerate(thumbs):
-                color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
-                href = f"?pick={urllib.parse.quote(nome)}"
-                html = f'''
-                <a class="sug-card" href="{href}">
-                    <img src="{img}" alt="{nome}"/>
-                    <div style="text-align:center; color:{color}; font-weight:bold; font-size:0.9em;">
-                        {status_text}
-                    </div>
-                </a>
-                '''
-                cols[idx].markdown(html, unsafe_allow_html=True)
+            cols_per_row = 3
+            for i in range(0, len(thumbs), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+                    color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+                    href = f"?pick={urllib.parse.quote(nome)}"
+                    html = f'''
+                    <a class="sug-card" href="{href}">
+                        <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
+                        <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
+                            {status_text}
+                        </div>
+                    </a>
+                    '''
+                    cols[idx].markdown(html, unsafe_allow_html=True)
+
 # =========================
 # Tab 2
 # =========================
@@ -224,6 +227,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
