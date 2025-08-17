@@ -6,8 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================
 # Config & listas
 # =========================
-allowed_sets = {...}  # mantém igual ao seu
-ban_list = {...}
+allowed_sets = {
+    # Seus códigos de set permitidos, em maiúsculas
+    "SET1", "SET2"
+}
+ban_list = {
+    # Nomes de cartas banidas
+    "Black Lotus", "Ancestral Recall"
+}
 
 # =========================
 # Utilidades
@@ -61,7 +67,7 @@ if "card_input" not in st.session_state:
     st.session_state.card_input = None
 
 # =========================
-# Tab 1
+# Tab 1 - Single Card Checker
 # =========================
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:",
@@ -94,8 +100,34 @@ with tab1:
                         unsafe_allow_html=True)
 
 # =========================
-# Tab 2
+# Tab 2 - Decklist Checker
 # =========================
 with tab2:
-    # ... seu código do deck checker ...
-    pass
+    st.write("Cole a lista do deck abaixo (uma carta por linha):")
+    deck_input = st.text_area("", height=300)
+
+    if st.button("Verificar Deck") and deck_input.strip():
+        linhas = [l.strip() for l in deck_input.splitlines() if l.strip()]
+        resultados = []
+
+        def processar_linha(linha):
+            # Remove quantidade no começo (ex: "3 Lightning Bolt")
+            partes = linha.split(" ", 1)
+            if partes[0].isdigit() and len(partes) > 1:
+                nome_carta = partes[1]
+            else:
+                nome_carta = linha
+            data = fetch_card_data(nome_carta)
+            if not data:
+                return (nome_carta, "❓ Not Found", "gray")
+            status_text, status_type = check_legality(data["name"], data["sets"])
+            cor = {"success":"green","warning":"orange","danger":"red"}.get(status_type, "black")
+            return (data["name"], status_text, cor)
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            resultados = list(executor.map(processar_linha, linhas))
+
+        # Mostra resultado
+        for nome, status_text, cor in resultados:
+            st.markdown(f"<span style='color:{cor}'>{status_text}</span> — {nome}",
+                        unsafe_allow_html=True)
