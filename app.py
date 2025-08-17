@@ -27,11 +27,18 @@ ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
 def buscar_sugestoes(query):
     try:
-        # 🔹 Só retorna nomes que comecem com o que foi digitado
-        url = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
-        r = requests.get(url, timeout=8)
+        # 🔹 Prefixo (case-insensitive)
+        url_prefix = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
+        r = requests.get(url_prefix, timeout=8)
         if r.status_code == 200:
-            return r.json().get("data", [])
+            data = [s for s in r.json().get("data", []) if "token" not in s.lower()]
+            if data:
+                return data
+        # 🔹 Fallback pro normal
+        url_any = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
+        r2 = requests.get(url_any, timeout=8)
+        if r2.status_code == 200:
+            return [s for s in r2.json().get("data", []) if "token" not in s.lower()]
     except:
         pass
     return []
@@ -112,14 +119,13 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1 - miniaturas clicáveis
+# Tab 1 - miniaturas clicáveis com fallback
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
     card_input = None
 
     if query and len(query) >= 1:
         sugestoes = buscar_sugestoes(query)
-        sugestoes = [s for s in sugestoes if "token" not in s.lower()]
 
         thumbs = []
         for nome in sugestoes[:5]:
@@ -156,7 +162,7 @@ with tab1:
             with st.expander("🗒️ Print sets found (debug)"):
                 st.write(sorted(card["sets"]))
 
-# Tab 2 - Decklist checker
+# Tab 2 - Decklist checker turbo
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
