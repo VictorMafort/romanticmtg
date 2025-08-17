@@ -4,19 +4,19 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 # =========================
-# Configurações e listas
+# Config & listas
 # =========================
 allowed_sets = {
-    # Substitua pelos códigos de set válidos para o formato
+    # Seus códigos de set permitidos, em maiúsculas
     "SET1", "SET2"
 }
 ban_list = {
-    # Substitua pelos nomes de cartas banidas
+    # Nomes de cartas banidas
     "Black Lotus", "Ancestral Recall"
 }
 
 # =========================
-# Funções utilitárias
+# Utilidades
 # =========================
 def buscar_sugestoes(query):
     try:
@@ -37,18 +37,14 @@ def buscar_sugestoes(query):
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
     try:
-        resp = requests.get(
-            f"https://api.scryfall.com/cards/named?exact={urllib.parse.quote(card_name)}",
-            timeout=8
-        )
+        resp = requests.get(f"https://api.scryfall.com/cards/named?exact={urllib.parse.quote(card_name)}", timeout=8)
         if resp.status_code != 200:
             return {}
         data = resp.json()
-        return {
-            "name": data.get("name", ""),
-            "image": data.get("image_uris", {}).get("normal"),
-            "sets": {data.get("set", "").upper()}
-        }
+        name = data.get("name", "")
+        img_url = data.get("image_uris", {}).get("normal", None)
+        set_codes = {data.get("set", "").upper()}
+        return {"name": name, "image": img_url, "sets": set_codes}
     except:
         return {}
 
@@ -60,7 +56,7 @@ def check_legality(name, sets):
     return "⚠️ Not Legal", "warning"
 
 # =========================
-# Configuração da página
+# App
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 st.title("🧙 Romantic Format Tools")
@@ -71,14 +67,11 @@ if "card_input" not in st.session_state:
     st.session_state.card_input = None
 
 # =========================
-# Aba 1 - Checagem de carta
+# Tab 1 - Single Card Checker
 # =========================
 with tab1:
-    query = st.text_input(
-        "Digite o começo do nome da carta:",
-        value=st.session_state.card_input or ""
-    )
-
+    query = st.text_input("Digite o começo do nome da carta:",
+                          value=st.session_state.card_input or "")
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
         thumbs = []
@@ -101,14 +94,13 @@ with tab1:
             st.error("❌ Carta não encontrada ou falha na comunicação.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
-            color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
-            st.markdown(
-                f"{card['name']}: <span style='color:{color}'>{status_text}</span>",
-                unsafe_allow_html=True
-            )
+            color = {"success":"green","warning":"orange","danger":"red"}[status_type]
+            st.markdown(f"{card['name']}: "
+                        f"<span style='color:{color}'>{status_text}</span>",
+                        unsafe_allow_html=True)
 
 # =========================
-# Aba 2 - Checagem de decklist
+# Tab 2 - Decklist Checker
 # =========================
 with tab2:
     st.write("Cole a lista do deck abaixo (uma carta por linha):")
@@ -116,8 +108,10 @@ with tab2:
 
     if st.button("Verificar Deck") and deck_input.strip():
         linhas = [l.strip() for l in deck_input.splitlines() if l.strip()]
+        resultados = []
 
         def processar_linha(linha):
+            # Remove quantidade no começo (ex: "3 Lightning Bolt")
             partes = linha.split(" ", 1)
             if partes[0].isdigit() and len(partes) > 1:
                 nome_carta = partes[1]
@@ -127,14 +121,13 @@ with tab2:
             if not data:
                 return (nome_carta, "❓ Not Found", "gray")
             status_text, status_type = check_legality(data["name"], data["sets"])
-            cor = {"success": "green", "warning": "orange", "danger": "red"}.get(status_type, "black")
+            cor = {"success":"green","warning":"orange","danger":"red"}.get(status_type, "black")
             return (data["name"], status_text, cor)
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             resultados = list(executor.map(processar_linha, linhas))
 
+        # Mostra resultado
         for nome, status_text, cor in resultados:
-            st.markdown(
-                f"<span style='color:{cor}'>{status_text}</span> — {nome}",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<span style='color:{cor}'>{status_text}</span> — {nome}",
+                        unsafe_allow_html=True)
