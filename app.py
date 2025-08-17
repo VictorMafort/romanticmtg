@@ -165,6 +165,9 @@ except Exception:
 # =========================
 # Tab 1
 # =========================
+# =========================
+# Tab 1 (Scryfall Syntax)
+# =========================
 with tab1:
     query = st.text_input(
         "Digite sua busca (aceita sintaxe completa da Scryfall):",
@@ -173,14 +176,14 @@ with tab1:
     card_input = picked or None
 
     if query.strip():
-        # Agora a função de busca é chamada com a query direta
+        # Usa a busca completa
         sugestoes = buscar_sugestoes(query.strip(), usar_syntax=True)
 
         thumbs = []
         for nome in sugestoes[:20]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
-                status_text, status_type = check_legality(data["name"], data["sets"])
+                status_text, status_type = check_legality(data["name"], data.get("sets", []))
                 thumbs.append((nome, data["image"], status_text, status_type))
 
         if thumbs:
@@ -189,11 +192,7 @@ with tab1:
             for i in range(0, len(thumbs), cols_per_row):
                 cols = st.columns(cols_per_row)
                 for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                    color = {
-                        "success": "green",
-                        "warning": "orange",
-                        "danger": "red"
-                    }[status_type]
+                    color = {"success": "green", "warning": "orange", "danger": "red"}.get(status_type, "gray")
                     href = f"?pick={urllib.parse.quote(nome)}"
                     html = f'''
                     <a class="sug-card" href="{href}">
@@ -204,6 +203,8 @@ with tab1:
                     </a>
                     '''
                     cols[idx].markdown(html, unsafe_allow_html=True)
+        else:
+            st.info("Nenhum resultado para essa busca.")
 
 # =========================
 # Tab 2
@@ -234,6 +235,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
