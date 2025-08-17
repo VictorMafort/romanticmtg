@@ -32,75 +32,75 @@ ban_list = {
 def buscar_sugestoes(query):
     try:
         url = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
-        r = requests.get(url, timeout=5)
+        r = requests.get(url, timeout=8)
         if r.status_code == 200:
             return r.json().get("data", [])
         else:
-            st.warning(f"⚠️ API retornou código {r.status_code} ao buscar sugestões")
+            st.warning(f"⚠️ API respondeu com {r.status_code} ao buscar sugestões")
+    except requests.Timeout:
+        st.warning("⏳ Tempo esgotado ao buscar sugestões")
     except requests.RequestException as e:
-        st.error(f"❌ Falha na conexão (sugestões): {e}")
+        st.error(f"❌ Erro na conexão: {e}")
     return []
 
 def fetch_card_data(card_name):
+    safe_name = urllib.parse.quote(card_name)
+    url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
+
     try:
-        safe_name = urllib.parse.quote(card_name)
-        # Busca básica
-        url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
-        resp = requests.get(url, timeout=5)
-        if resp.status_code != 200:
-            st.warning(f"⚠️ API retornou código {resp.status_code} para '{card_name}'")
+        resp = requests.get(url, timeout=8)
+    except requests.Timeout:
+        st.warning(f"⏳ Timeout ao buscar '{card_name}', tentando de novo...")
+        try:
+            resp = requests.get(url, timeout=8)
+        except requests.Timeout:
+            st.error(f"❌ API não respondeu a tempo para '{card_name}'")
             return None
-
-        data = resp.json()
-        if "name" not in data:
-            st.warning(f"⚠️ Resposta inesperada da API para '{card_name}'")
+        except requests.RequestException as e:
+            st.error(f"❌ Erro de conexão na segunda tentativa: {e}")
             return None
+    except requests.RequestException as e:
+        st.error(f"❌ Erro de conexão: {e}")
+        return None
 
-        all_sets = set()
+    if resp.status_code != 200:
+        st.warning(f"⚠️ API respondeu com {resp.status_code} para '{card_name}'")
+        return None
 
-        # 🚀 Busca rápida: checa todos os sets permitidos em uma chamada
-        set_query = "+or+".join(s.lower() for s in allowed_sets)
-        quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
-        quick_resp = requests.get(quick_url, timeout=5)
-        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards", 0) > 0:
-            # Já achou set permitido
-            for c in quick_resp.json().get("data", []):
+    data = resp.json()
+    if "prints_search_uri" not in data:
+        st.warning(f"⚠️ Resposta inesperada da API para '{card_name}'")
+        return None
+
+    all_sets = set()
+    next_page = data["prints_search_uri"]
+
+    while next_page:
+        try:
+            p = requests.get(next_page, timeout=8)
+            if p.status_code != 200:
+                st.warning(f"⚠️ API retornou {p.status_code} ao buscar prints")
+                break
+            j = p.json()
+            for c in j["data"]:
                 if "Token" not in c.get("type_line", ""):
                     all_sets.add(c["set"].upper())
-            return {
-                "name": data["name"],
-                "sets": all_sets,
-                "image": data.get("image_uris", {}).get("normal", None),
-                "type": data.get("type_line", ""),
-                "mana": data.get("mana_cost", ""),
-                "oracle": data.get("oracle_text", "")
-            }
+            next_page = j.get("next_page", None)
+        except requests.Timeout:
+            st.warning("⏳ Timeout ao buscar prints")
+            break
+        except requests.RequestException as e:
+            st.error(f"❌ Erro ao buscar prints: {e}")
+            break
 
-        # Fallback: busca todos os prints (pode ser mais lenta)
-        if "prints_search_uri" in data:
-            next_page = data["prints_search_uri"]
-            while next_page:
-                p = requests.get(next_page, timeout=5)
-                if p.status_code != 200:
-                    break
-                j = p.json()
-                for c in j["data"]:
-                    if "Token" not in c.get("type_line", ""):
-                        all_sets.add(c["set"].upper())
-                next_page = j.get("next_page", None)
-
-        return {
-            "name": data["name"],
-            "sets": all_sets,
-            "image": data.get("image_uris", {}).get("normal", None),
-            "type": data.get("type_line", ""),
-            "mana": data.get("mana_cost", ""),
-            "oracle": data.get("oracle_text", "")
-        }
-
-    except requests.RequestException as e:
-        st.error(f"❌ Falha na conexão (dados da carta): {e}")
-        return None
+    return {
+        "name": data.get("name", ""),
+        "sets": all_sets,
+        "image": data.get("image_uris", {}).get("normal", None),
+        "type": data.get("type_line", ""),
+        "mana": data.get("mana_cost", ""),
+        "oracle": data.get("oracle_text", "")
+    }
 
 def check_legality(name, sets):
     if name in ban_list:
