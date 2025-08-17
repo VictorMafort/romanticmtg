@@ -23,9 +23,7 @@ allowed_sets = {
 }
 
 # Banned cards
-ban_list = {
-    "Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"
-}
+ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
 def buscar_sugestoes(query):
     try:
@@ -108,22 +106,41 @@ def check_legality(name, sets):
         return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
-
 # --- UI ---
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1 - Selectbox como Autocomplete
+# Tab 1 - sugestões com imagens
 with tab1:
     query = st.text_input("Digite parte do nome da carta:")
-    sugestoes = []
+    card_input = None
+
     if query and len(query) >= 3:
         sugestoes = buscar_sugestoes(query)
         sugestoes = [s for s in sugestoes if "token" not in s.lower()]
-    selected_card = st.selectbox("Sugestões:", [""] + sugestoes)
 
-    card_input = selected_card or query
+        opcoes = []
+        for nome in sugestoes[:5]:
+            data = fetch_card_data(nome)
+            if data and data.get("image"):
+                opcoes.append((nome, data["image"]))
+            else:
+                opcoes.append((nome, None))
+
+        if opcoes:
+            st.caption("🔍 Sugestões:")
+            for nome, img in opcoes:
+                cols = st.columns([1,4])
+                with cols[0]:
+                    if img:
+                        st.image(img, width=60)
+                if cols[1].button(nome, key=f"sug_{nome}"):
+                    card_input = nome
+
+    # Se não clicou, usa o que digitou
+    if not card_input:
+        card_input = query
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
@@ -145,7 +162,7 @@ with tab1:
             with st.expander("🗒️ Print sets found (debug)"):
                 st.write(sorted(card["sets"]))
 
-# Tab 2 - Decklist
+# Tab 2 - Decklist checker
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
