@@ -197,6 +197,8 @@ with tab1:
     )
     card_input = picked or None
 
+    thumbs = []
+    
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())  # busca clássica
 
@@ -268,6 +270,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
