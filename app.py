@@ -206,7 +206,7 @@ with tab1:
     )
     card_input = picked or None
 
-    # ✅ Inicializa a lista sempre
+    # Inicializa lista para armazenar as sugestões visuais
     thumbs = []
 
     if query.strip():
@@ -242,15 +242,20 @@ with tab1:
                         unsafe_allow_html=True
                     )
 
-                    # Botões para remover no deckbuilder
-                    colA, colB = st.columns(2)
+                    # Linha de botões: -4 / -1 / +1 / +4
+                    colA, colB, colC, colD = st.columns(4)
                     with colA:
-                        if st.button("-1", key=f"sub1_{i}_{idx}"):
-                            remove_card(nome, 1)
-                    with colB:
                         if st.button("-4", key=f"sub4_{i}_{idx}"):
                             remove_card(nome, 4)
-
+                    with colB:
+                        if st.button("-1", key=f"sub1_{i}_{idx}"):
+                            remove_card(nome, 1)
+                    with colC:
+                        if st.button("+1", key=f"add1_{i}_{idx}"):
+                            add_card(nome, 1)
+                    with colD:
+                        if st.button("+4", key=f"add4_{i}_{idx}"):
+                            add_card(nome, 4)
 # =========================
 # Tab 2
 # =========================
@@ -313,5 +318,6 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
