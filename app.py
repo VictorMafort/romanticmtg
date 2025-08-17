@@ -119,7 +119,7 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1 - miniaturas clicáveis com fallback
+# Tab 1 - miniaturas clicáveis
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
     card_input = None
@@ -137,9 +137,10 @@ with tab1:
             st.caption("🔍 Sugestões:")
             cols = st.columns(len(thumbs))
             for idx, (nome, img) in enumerate(thumbs):
+                # Imagem como botão clicável
                 if cols[idx].button("", key=f"sug_{nome}"):
                     card_input = nome
-                cols[idx].image(img, use_column_width=True)
+                cols[idx].image(img, use_container_width=True)
 
     if not card_input:
         card_input = query
