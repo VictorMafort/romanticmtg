@@ -5,29 +5,26 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Allowed sets for Romantic format
 allowed_sets = {
-    "8ED", "MRD", "DST", "5DN",
-    "CHK", "BOK", "SOK",
+    "8ED","MRD","DST","5DN",
+    "CHK","BOK","SOK",
     "9ED",
-    "RAV", "GPT", "DIS",
-    "CSP", "TSP", "TSB", "PLC", "FUT",
+    "RAV","GPT","DIS",
+    "CSP","TSP","TSB","PLC","FUT",
     "10E",
-    "LRW", "MOR", "SHM", "EVE",
-    "ALA", "CON", "ARB",
+    "LRW","MOR","SHM","EVE",
+    "ALA","CON","ARB",
     "M10",
-    "ZEN", "WWK", "ROE",
+    "ZEN","WWK","ROE",
     "M11",
-    "SOM", "MBS", "NPH",
+    "SOM","MBS","NPH",
     "M12",
-    "ISD", "DKA", "AVR",
+    "ISD","DKA","AVR",
     "M13"
 }
 
 # Banned cards
 ban_list = {
-    "Gitaxian Probe",
-    "Mental Misstep",
-    "Blazing Shoal",
-    "Skullclamp"
+    "Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"
 }
 
 def buscar_sugestoes(query):
@@ -36,51 +33,43 @@ def buscar_sugestoes(query):
         r = requests.get(url, timeout=8)
         if r.status_code == 200:
             return r.json().get("data", [])
-        else:
-            st.warning(f"⚠️ API retornou {r.status_code} ao buscar sugestões")
-    except requests.Timeout:
-        st.warning("⏳ Tempo esgotado ao buscar sugestões")
-    except requests.RequestException as e:
-        st.error(f"❌ Erro na conexão: {e}")
+    except:
+        pass
     return []
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
     safe_name = urllib.parse.quote(card_name)
     url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
-
     try:
         resp = requests.get(url, timeout=8)
-    except requests.RequestException:
+    except:
         return None
-
     if resp.status_code != 200:
         return None
-
     data = resp.json()
     if "prints_search_uri" not in data:
         return None
 
     all_sets = set()
-
     # Busca rápida
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
     try:
         quick_resp = requests.get(quick_url, timeout=8)
-        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards", 0) > 0:
+        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards",0) > 0:
             for c in quick_resp.json().get("data", []):
-                if "Token" not in c.get("type_line", ""):
+                if "Token" not in c.get("type_line",""):
                     all_sets.add(c["set"].upper())
             return {
-                "name": data.get("name", ""),
+                "name": data.get("name",""),
                 "sets": all_sets,
-                "image": data.get("image_uris", {}).get("normal", None),
-                "type": data.get("type_line", ""),
-                "mana": data.get("mana_cost", ""),
-                "oracle": data.get("oracle_text", "")
+                "image": data.get("image_uris",{}).get("normal"),
+                "type": data.get("type_line",""),
+                "mana": data.get("mana_cost",""),
+                "oracle": data.get("oracle_text","")
             }
-    except requests.RequestException:
+    except:
         pass
 
     # Busca lenta
@@ -92,24 +81,24 @@ def fetch_card_data(card_name):
                 break
             j = p.json()
             for c in j["data"]:
-                if "Token" not in c.get("type_line", ""):
+                if "Token" not in c.get("type_line",""):
                     set_code = c["set"].upper()
                     all_sets.add(set_code)
                     if set_code in allowed_sets:
                         next_page = None
                         break
             else:
-                next_page = j.get("next_page", None)
-        except requests.RequestException:
+                next_page = j.get("next_page")
+        except:
             break
 
     return {
-        "name": data.get("name", ""),
+        "name": data.get("name",""),
         "sets": all_sets,
-        "image": data.get("image_uris", {}).get("normal", None),
-        "type": data.get("type_line", ""),
-        "mana": data.get("mana_cost", ""),
-        "oracle": data.get("oracle_text", "")
+        "image": data.get("image_uris",{}).get("normal"),
+        "type": data.get("type_line",""),
+        "mana": data.get("mana_cost",""),
+        "oracle": data.get("oracle_text","")
     }
 
 def check_legality(name, sets):
@@ -119,75 +108,63 @@ def check_legality(name, sets):
         return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
+
 # --- UI ---
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1
+# Tab 1 - Selectbox como Autocomplete
 with tab1:
-    # Campo de texto
-    card_input = st.text_input("Digite o nome da carta:", value=st.session_state.get("selected_card", ""))
-
-    # Autocomplete com filtro anti-token
-    if card_input and len(card_input) >= 3:
-        sugestoes = buscar_sugestoes(card_input)
+    query = st.text_input("Digite parte do nome da carta:")
+    sugestoes = []
+    if query and len(query) >= 3:
+        sugestoes = buscar_sugestoes(query)
         sugestoes = [s for s in sugestoes if "token" not in s.lower()]
-        if sugestoes:
-            st.caption("🔍 Sugestões:")
-            for s in sugestoes[:5]:
-                if st.button(s, key=f"sug_{s}"):
-                    st.session_state["selected_card"] = s
-                    st.experimental_rerun()
+    selected_card = st.selectbox("Sugestões:", [""] + sugestoes)
+
+    card_input = selected_card or query
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
             card = fetch_card_data(card_input)
-
         if not card:
             st.error("❌ Carta não encontrada ou falha na comunicação.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
-            color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+            color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{card['name']}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
-
             if card["image"]:
-                cols = st.columns([1, 2, 1])
+                cols = st.columns([1,2,1])
                 with cols[1]:
                     st.image(card["image"], caption=card["name"], width=300)
-
             with st.expander("📋 Card Details"):
                 st.markdown(f"**Type:** {card['type']}")
                 st.markdown(f"**Mana Cost:** {card['mana']}")
                 st.markdown(f"**Oracle Text:** {card['oracle']}")
-
             with st.expander("🗒️ Print sets found (debug)"):
                 st.write(sorted(card["sets"]))
 
-# Tab 2
+# Tab 2 - Decklist
 with tab2:
-    st.write("Paste your decklist below (one card per line, with or without quantity):")
+    st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
-
     if deck_input:
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
-
         def process_line(line):
-            parts = line.split(" ", 1)
-            name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
+            parts = line.split(" ",1)
+            name_guess = parts[1] if parts[0].isdigit() and len(parts)>1 else line
             card = fetch_card_data(name_guess)
             if not card:
-                return (line, "❌ Card not found or API error", "danger", None)
+                return (line, "❌ Card not found or API error","danger", None)
             status_text, status_type = check_legality(card["name"], card["sets"])
             return (card["name"], status_text, status_type, card["sets"])
-
         with st.spinner("Checking decklist..."):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
-
         st.subheader("📋 Decklist Results:")
         for name, status_text, status_type, sets in results:
-            color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+            color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Print sets for {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
