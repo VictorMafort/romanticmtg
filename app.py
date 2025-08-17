@@ -206,13 +206,12 @@ with tab1:
     )
     card_input = picked or None
 
-    # Inicializa lista sempre, pra evitar erro
-    thumbs = []
+    thumbs = []  # inicializa sempre
 
     if query.strip():
-        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
+        sugestoes = buscar_sugestoes(query.strip())
 
-        for nome in sugestoes[:21]:  # mostra até 21 sugestões
+        for nome in sugestoes[:21]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
                 status_text, status_type = check_legality(
@@ -306,7 +305,7 @@ with tab3:
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
 
-            # Agora subtrair vem antes e depois adicionar
+            # Invertido: subtrair antes de adicionar
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
                 st.experimental_rerun()
