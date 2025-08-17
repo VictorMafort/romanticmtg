@@ -149,68 +149,33 @@ st.markdown("""
   background-color: rgba(255, 255, 255, 0.04);
 }
 .overlay-btns {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.sug-card:hover .overlay-btns {
-  opacity: 1;
-}
-.overlay-btn {
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-weight: bold;
-  font-size: 0.9em;
-  cursor: pointer;
-  user-select: none;
-}
-.overlay-btn:hover {
-  background: rgba(0,0,0,0.85);
-}
-.overlay-btns {
     position: absolute;
-    top: 65%; /* abaixa os botões para perto do meio inferior da carta */
+    top: 20%; /* cobre a arte, mas não o texto */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 4px; /* espaçamento pequeno entre botões */
     z-index: 5;
 }
 
-.overlay-btn {
-    display: flex;
-    flex-direction: column;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.btn-half {
+.btn {
+    background-color: rgba(255,255,255,0.95);
+    color: black;
+    font-weight: bold;
+    font-size: 0.8em;
     width: 38px;
     height: 26px;
-    background-color: rgba(255,255,255,0.95); /* branco opaco */
-    color: black; /* texto preto */
-    font-size: 0.8em;
-    font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid #ccc;
+    border-radius: 4px;
     cursor: pointer;
-    border: 1px solid #ccc; /* contorno leve para destacar */
 }
 
-.btn-half:hover {
-    background-color: rgba(230,230,230,1); /* cinza claro no hover */
-}
-
-.minus {
-    border-bottom: 1px solid #ccc;
+.btn:hover {
+    background-color: rgba(230,230,230,1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -267,14 +232,11 @@ if thumbs:
 <div class="sug-card">
     <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
     <div class="overlay-btns">
-        <div class="overlay-btn">
-            <div class="btn-half minus">-1</div>
-            <div class="btn-half plus">+1</div>
-        </div>
-        <div class="overlay-btn">
-            <div class="btn-half minus">-4</div>
-            <div class="btn-half plus">+4</div>
-        </div>
+        <div class="btn minus">-1</div>
+        <div class="btn plus">+1</div>
+        <div style="width: 12px;"></div> <!-- espaço entre os pares -->
+        <div class="btn minus">-4</div>
+        <div class="btn plus">+4</div>
     </div>
     <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
         {status_text}
@@ -311,6 +273,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
