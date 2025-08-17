@@ -3,7 +3,9 @@ import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-# Sets permitidos no formato Romantic
+# =========================
+# Config & listas
+# =========================
 allowed_sets = {
     "8ED","MRD","DST","5DN",
     "CHK","BOK","SOK",
@@ -22,9 +24,11 @@ allowed_sets = {
     "M13"
 }
 
-# Cartas banidas
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
+# =========================
+# Utilidades
+# =========================
 def buscar_sugestoes(query):
     try:
         # Prefixo primeiro
@@ -34,7 +38,7 @@ def buscar_sugestoes(query):
             data = [s for s in r.json().get("data", []) if "token" not in s.lower()]
             if data:
                 return data
-        # Fallback
+        # Fallback geral
         url_any = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
         r2 = requests.get(url_any, timeout=8)
         if r2.status_code == 200:
@@ -58,7 +62,8 @@ def fetch_card_data(card_name):
         return None
 
     all_sets = set()
-    # Busca rápida
+
+    # Busca rápida limitada aos sets permitidos
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
     try:
@@ -78,7 +83,7 @@ def fetch_card_data(card_name):
     except:
         pass
 
-    # Busca lenta
+    # Busca completa por prints (early stop se achar set permitido)
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -114,20 +119,62 @@ def check_legality(name, sets):
         return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
-# --- UI ---
+# =========================
+# App
+# =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
+
+# CSS básico para caixinhas clicáveis
+st.markdown("""
+<style>
+.sug-card {
+  background-color: #f6f6f6;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  padding: 4px;
+  transition: transform .05s ease, box-shadow .1s ease;
+  display: block;
+  text-decoration: none !important;
+}
+.sug-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,.15);
+}
+.sug-card img {
+  width: 100%;
+  border-radius: 6px;
+  display: block;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
+# Captura de clique via query param (?pick=Nome)
+picked = None
+try:
+    params = st.experimental_get_query_params()
+    if "pick" in params and params["pick"]:
+        picked = params["pick"][0]
+        # limpa o pick da URL pra não ficar preso
+        st.experimental_set_query_params()
+except Exception:
+    pass
+
+# =========================
+# Tab 1
+# =========================
 with tab1:
-    query = st.text_input("Digite o começo do nome da carta:")
-    card_input = None
+    query = st.text_input("Digite o começo do nome da carta:", value=picked or "")
+    card_input = picked or None
 
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
 
+        # Monta thumbs (até 6 pra ficar bonito em grid)
         thumbs = []
-        for nome in sugestoes[:5]:
+        for nome in sugestoes[:6]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
                 thumbs.append((nome, data["image"]))
@@ -136,9 +183,9 @@ with tab1:
             st.caption("🔍 Sugestões:")
             cols = st.columns(len(thumbs))
             for idx, (nome, img) in enumerate(thumbs):
-                if cols[idx].button(f"‎", key=f"sug_{nome}"):  # label invisível usando caractere zero-width
-                    card_input = nome
-                cols[idx].image(img, use_container_width=True)
+                href = f"?pick={urllib.parse.quote(nome)}"
+                html = f'<a class="sug-card" href="{href}"><img src="{img}" alt="{nome}"/></a>'
+                cols[idx].markdown(html, unsafe_allow_html=True)
 
     if not card_input:
         card_input = query.strip()
@@ -146,26 +193,35 @@ with tab1:
     if card_input:
         with st.spinner("Consultando Scryfall..."):
             card = fetch_card_data(card_input)
+
         if not card:
             st.error("❌ Carta não encontrada ou falha na comunicação.")
         else:
             status_text, status_type = check_legality(card["name"], card["sets"])
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{card['name']}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
+
             if card["image"]:
                 st.image(card["image"], caption=card["name"], width=300)
+
             with st.expander("📋 Detalhes da Carta"):
                 st.markdown(f"**Type:** {card['type']}")
                 st.markdown(f"**Mana Cost:** {card['mana']}")
                 st.markdown(f"**Oracle Text:** {card['oracle']}")
+
             with st.expander("🗒️ Sets encontrados (debug)"):
                 st.write(sorted(card["sets"]))
 
+# =========================
+# Tab 2
+# =========================
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
+
     if deck_input.strip():
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
+
         def process_line(line):
             parts = line.split(" ",1)
             name_guess = parts[1] if parts[0].isdigit() and len(parts)>1 else line
@@ -174,9 +230,11 @@ with tab2:
                 return (line, "❌ Card not found or API error","danger", None)
             status_text, status_type = check_legality(card["name"], card["sets"])
             return (card["name"], status_text, status_type, card["sets"])
+
         with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
+
         st.subheader("📋 Resultados:")
         for name, status_text, status_type, sets in results:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
