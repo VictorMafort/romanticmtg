@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 # =========================
 # Config & listas
 # =========================
-allowed_sets = {...}  # mantém igual
+allowed_sets = {...}  # mantém igual ao seu
 ban_list = {...}
 
 # =========================
@@ -30,8 +30,17 @@ def buscar_sugestoes(query):
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
-    # ... igual ao anterior ...
-    return {...}
+    try:
+        resp = requests.get(f"https://api.scryfall.com/cards/named?exact={urllib.parse.quote(card_name)}", timeout=8)
+        if resp.status_code != 200:
+            return {}
+        data = resp.json()
+        name = data.get("name", "")
+        img_url = data.get("image_uris", {}).get("normal", None)
+        set_codes = {data.get("set", "").upper()}
+        return {"name": name, "image": img_url, "sets": set_codes}
+    except:
+        return {}
 
 def check_legality(name, sets):
     if name in ban_list:
@@ -44,11 +53,10 @@ def check_legality(name, sets):
 # App
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
-
 st.title("🧙 Romantic Format Tools")
+
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Mantém escolha entre ciclos de execução
 if "card_input" not in st.session_state:
     st.session_state.card_input = None
 
@@ -63,7 +71,7 @@ with tab1:
         thumbs = []
         for nome in sugestoes[:6]:
             data = fetch_card_data(nome)
-            if data and data.get("image"):
+            if isinstance(data, dict) and data.get("image"):
                 thumbs.append((nome, data["image"]))
         if thumbs:
             st.caption("🔍 Sugestões:")
@@ -73,7 +81,6 @@ with tab1:
                     st.session_state.card_input = nome
                 cols[idx].image(img, use_container_width=True)
 
-    # Usa escolha atual
     if st.session_state.card_input:
         with st.spinner("Consultando Scryfall..."):
             card = fetch_card_data(st.session_state.card_input)
@@ -90,5 +97,5 @@ with tab1:
 # Tab 2
 # =========================
 with tab2:
-    # ... deck checker turbo igual ...
+    # ... seu código do deck checker ...
     pass
