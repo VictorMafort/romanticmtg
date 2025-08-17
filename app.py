@@ -174,23 +174,6 @@ st.markdown("""
 if "deck" not in st.session_state:
     st.session_state.deck = {}
 
-# Função para carregar o catálogo inicial de cartas
-@st.cache_data(show_spinner=False)
-def carregar_catalogo_inicial():
-    url = "https://api.scryfall.com/catalog/card-names"
-    try:
-        resp = requests.get(url, timeout=8)
-        if resp.status_code == 200:
-            # Retorna a lista de nomes (já filtrando se quiser)
-            return [name for name in resp.json().get("data", []) if "token" not in name.lower()]
-    except:
-        pass
-    return []
-
-# Estado do catálogo
-if "catalog" not in st.session_state:
-    st.session_state.catalog = carregar_catalogo_inicial()
-
 def add_card(card_name, qty=1):
     st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
 
@@ -214,50 +197,59 @@ except Exception:
     pass
 	
 # =========================
-# Tab 1 - Single Card Checker (com adicionar e remover)
+# Tab 1 - Single Card Checker
 # =========================
 with tab1:
-    st.subheader("🔍 Buscar e Adicionar Cartas")
+    query = st.text_input(
+        "Digite o começo do nome da carta:",
+        value=picked or ""
+    )
+    card_input = picked or None
 
-    # Campo de busca
-    search_query = st.text_input("Digite o nome da carta")
+    thumbs = []
 
-    if search_query:
-        # Filtra catálogo (case-insensitive)
-        results = [
-            c for c in st.session_state.catalog
-            if search_query.lower() in c.lower()
-        ]
+    if query.strip():
+        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
 
-        if results:
-            for card in results:
-                col1, col2 = st.columns([5, 1])
-                col1.markdown(f"**{card}**")
+        for nome in sugestoes[:21]:  # mostra até 21 sugestões
+            data = fetch_card_data(nome)
+            if data and data.get("image"):
+                status_text, status_type = check_legality(
+                    data["name"], data.get("sets", [])
+                )
+                thumbs.append((nome, data["image"], status_text, status_type))
 
-                # Busca dados completos da carta
-                card_data = fetch_card_data(card)
+    if thumbs:
+        st.caption("🔍 Sugestões:")
+        cols_per_row = 3
+        for i in range(0, len(thumbs), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+                color = {
+                    "success": "green",
+                    "warning": "orange",
+                    "danger": "red"
+                }[status_type]
 
-                # Exibe imagem se disponível
-                if card_data:
-                    if card_data.get("image"):
-                        col1.image(card_data["image"], use_column_width=True)
-                    elif card_data.get("card_faces"):
-                        # Caso de cartas dupla face
-                        face_img = card_data["card_faces"][0].get("image_uris", {}).get("normal")
-                        if face_img:
-                            col1.image(face_img, use_column_width=True)
+                with cols[idx]:
+                    # Imagem da carta
+                    st.image(img, use_container_width=True)
 
-                # Botão de adicionar carta
-                if col2.button(
-                    "➕",
-                    key=f"add_{card}_{st.session_state.deck.get(card, 0)}"
-                ):
-                    add_card(card, 1)
-                    st.experimental_rerun()
-        else:
-            st.warning("Nenhuma carta encontrada.")
-    else:
-        st.info("Digite parte do nome de uma carta para buscar no catálogo.")
+                    # Status (legal, banned, warning)
+                    st.markdown(
+                        f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
+                        unsafe_allow_html=True
+                    )
+
+                    # Botões para adicionar no deckbuilder
+                    colA, colB = st.columns(2)
+                    with colA:
+                        if st.button("+1", key=f"add1_{i}_{idx}"):
+                            add_card(nome, 1)
+                    with colB:
+                        if st.button("+4", key=f"add4_{i}_{idx}"):
+                            add_card(nome, 4)
+
 # =========================
 # Tab 2
 # =========================
@@ -294,37 +286,27 @@ with tab2:
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
 				
 # =========================
-# Tab 3 - Deckbuilder (botões invertidos)
+# Tab 3 - Deckbuilder
 # =========================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
-    total_cartas = sum(st.session_state.deck.values())
-
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        st.markdown(f"**Total de cartas no deck:** {total_cartas}")
-        st.markdown("---")
-
-        for card, qty in list(st.session_state.deck.items()):
+        for card, qty in st.session_state.deck.items():
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
-
-            if col3.button("➖", key=f"minus_{card}_{qty}"):
-                remove_card(card, 1)
-                st.experimental_rerun()
-            if col4.button("➕", key=f"plus_{card}_{qty}"):
+            if col3.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
-                st.experimental_rerun()
+            if col4.button("➖", key=f"minus_{card}"):
+                remove_card(card, 1)
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
-            st.experimental_rerun()
+            st.success("Deck limpo!")
 
-
-
-
-
+    st.markdown("---")
+    st.caption("Dica: use a Aba 1 para pesquisar cartas e adicioná-las rapidamente ao deck.")
