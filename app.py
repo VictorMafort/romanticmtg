@@ -27,7 +27,8 @@ ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
 def buscar_sugestoes(query):
     try:
-        url = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
+        # 🔹 Só retorna nomes que comecem com o que foi digitado
+        url = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
         r = requests.get(url, timeout=8)
         if r.status_code == 200:
             return r.json().get("data", [])
@@ -111,34 +112,29 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1 - sugestões com imagens
+# Tab 1 - miniaturas clicáveis
 with tab1:
-    query = st.text_input("Digite parte do nome da carta:")
+    query = st.text_input("Digite o começo do nome da carta:")
     card_input = None
 
-    if query and len(query) >= 3:
+    if query and len(query) >= 1:
         sugestoes = buscar_sugestoes(query)
         sugestoes = [s for s in sugestoes if "token" not in s.lower()]
 
-        opcoes = []
+        thumbs = []
         for nome in sugestoes[:5]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
-                opcoes.append((nome, data["image"]))
-            else:
-                opcoes.append((nome, None))
+                thumbs.append((nome, data["image"]))
 
-        if opcoes:
+        if thumbs:
             st.caption("🔍 Sugestões:")
-            for nome, img in opcoes:
-                cols = st.columns([1,4])
-                with cols[0]:
-                    if img:
-                        st.image(img, width=60)
-                if cols[1].button(nome, key=f"sug_{nome}"):
+            cols = st.columns(len(thumbs))
+            for idx, (nome, img) in enumerate(thumbs):
+                if cols[idx].button("", key=f"sug_{nome}"):
                     card_input = nome
+                cols[idx].image(img, use_column_width=True)
 
-    # Se não clicou, usa o que digitou
     if not card_input:
         card_input = query
 
@@ -152,9 +148,7 @@ with tab1:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{card['name']}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             if card["image"]:
-                cols = st.columns([1,2,1])
-                with cols[1]:
-                    st.image(card["image"], caption=card["name"], width=300)
+                st.image(card["image"], caption=card["name"], width=300)
             with st.expander("📋 Card Details"):
                 st.markdown(f"**Type:** {card['type']}")
                 st.markdown(f"**Mana Cost:** {card['mana']}")
