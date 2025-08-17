@@ -3,7 +3,7 @@ import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-# Allowed sets for Romantic format
+# Sets permitidos no formato Romantic
 allowed_sets = {
     "8ED","MRD","DST","5DN",
     "CHK","BOK","SOK",
@@ -22,19 +22,19 @@ allowed_sets = {
     "M13"
 }
 
-# Banned cards
+# Cartas banidas
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
 def buscar_sugestoes(query):
     try:
-        # 🔹 Prefixo (case-insensitive)
+        # Prefixo primeiro
         url_prefix = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
         r = requests.get(url_prefix, timeout=8)
         if r.status_code == 200:
             data = [s for s in r.json().get("data", []) if "token" not in s.lower()]
             if data:
                 return data
-        # 🔹 Fallback pro normal
+        # Fallback
         url_any = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
         r2 = requests.get(url_any, timeout=8)
         if r2.status_code == 200:
@@ -119,13 +119,12 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
-# Tab 1 - miniaturas clicáveis
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
     card_input = None
 
-    if query and len(query) >= 1:
-        sugestoes = buscar_sugestoes(query)
+    if query.strip():
+        sugestoes = buscar_sugestoes(query.strip())
 
         thumbs = []
         for nome in sugestoes[:5]:
@@ -137,13 +136,12 @@ with tab1:
             st.caption("🔍 Sugestões:")
             cols = st.columns(len(thumbs))
             for idx, (nome, img) in enumerate(thumbs):
-                # Imagem como botão clicável
-                if cols[idx].button("", key=f"sug_{nome}"):
+                if cols[idx].button(f"‎", key=f"sug_{nome}"):  # label invisível usando caractere zero-width
                     card_input = nome
                 cols[idx].image(img, use_container_width=True)
 
     if not card_input:
-        card_input = query
+        card_input = query.strip()
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
@@ -156,18 +154,17 @@ with tab1:
             st.markdown(f"{card['name']}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             if card["image"]:
                 st.image(card["image"], caption=card["name"], width=300)
-            with st.expander("📋 Card Details"):
+            with st.expander("📋 Detalhes da Carta"):
                 st.markdown(f"**Type:** {card['type']}")
                 st.markdown(f"**Mana Cost:** {card['mana']}")
                 st.markdown(f"**Oracle Text:** {card['oracle']}")
-            with st.expander("🗒️ Print sets found (debug)"):
+            with st.expander("🗒️ Sets encontrados (debug)"):
                 st.write(sorted(card["sets"]))
 
-# Tab 2 - Decklist checker turbo
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
-    if deck_input:
+    if deck_input.strip():
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
         def process_line(line):
             parts = line.split(" ",1)
@@ -177,12 +174,12 @@ with tab2:
                 return (line, "❌ Card not found or API error","danger", None)
             status_text, status_type = check_legality(card["name"], card["sets"])
             return (card["name"], status_text, status_type, card["sets"])
-        with st.spinner("Checking decklist..."):
+        with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
-        st.subheader("📋 Decklist Results:")
+        st.subheader("📋 Resultados:")
         for name, status_text, status_type, sets in results:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
-            with st.expander(f"🗒️ Print sets for {name} (debug)"):
+            with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
