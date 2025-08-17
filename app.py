@@ -212,13 +212,16 @@ with tab1:
 if thumbs:
     st.caption("🔍 Sugestões:")
     cols_per_row = 3
-for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+    for i in range(0, len(thumbs), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
     color = {
         "success": "green",
         "warning": "orange",
         "danger": "red"
     }[status_type]
 
+    # Links para adicionar/remover cartas
     href_add1 = f"?add={urllib.parse.quote(nome)}&qty=1"
     href_add4 = f"?add={urllib.parse.quote(nome)}&qty=4"
     href_rem1 = f"?remove={urllib.parse.quote(nome)}&qty=1"
@@ -238,8 +241,13 @@ for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_
             <a href="{href_add4}" class="btn plus">+4</a>
         </div>
     </div>
+    <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
+        {status_text}
+    </div>
 </div>
 '''
+
+    cols[idx].markdown(html, unsafe_allow_html=True)
 # =========================
 # Tab 2
 # =========================
@@ -309,9 +317,6 @@ with tab3:
             st.write(f"**{qty}x** {card}")
     else:
         st.write("Seu deck está vazio. Adicione cartas na Tab 1.")
-
-
-
 
 
 
