@@ -174,6 +174,10 @@ st.markdown("""
 if "deck" not in st.session_state:
     st.session_state.deck = {}
 
+# Estado do catálogo (lista de cartas)
+if "catalog" not in st.session_state:
+    st.session_state.catalog = []  # ou carregue sua lista inicial aqui
+
 def add_card(card_name, qty=1):
     st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
 
@@ -293,4 +297,5 @@ with tab3:
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.experimental_rerun()
+
 
