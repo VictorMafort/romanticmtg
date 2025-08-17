@@ -206,7 +206,7 @@ with tab1:
     )
     card_input = picked or None
 
-    # Inicializa lista para armazenar as sugestões visuais
+    # Inicializa lista sempre, pra evitar erro
     thumbs = []
 
     if query.strip():
@@ -233,29 +233,30 @@ with tab1:
                 }[status_type]
 
                 with cols[idx]:
-                    # Imagem da carta
                     st.image(img, use_container_width=True)
 
-                    # Status (legal, banned, warning)
                     st.markdown(
                         f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
                         unsafe_allow_html=True
                     )
 
-                    # Linha de botões: -4 / -1 / +1 / +4
                     colA, colB, colC, colD = st.columns(4)
                     with colA:
                         if st.button("-4", key=f"sub4_{i}_{idx}"):
                             remove_card(nome, 4)
+                            st.experimental_rerun()
                     with colB:
                         if st.button("-1", key=f"sub1_{i}_{idx}"):
                             remove_card(nome, 1)
+                            st.experimental_rerun()
                     with colC:
                         if st.button("+1", key=f"add1_{i}_{idx}"):
                             add_card(nome, 1)
+                            st.experimental_rerun()
                     with colD:
                         if st.button("+4", key=f"add4_{i}_{idx}"):
                             add_card(nome, 4)
+                            st.experimental_rerun()
 # =========================
 # Tab 2
 # =========================
@@ -308,16 +309,20 @@ with tab3:
             # Agora subtrair vem antes e depois adicionar
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
+                st.experimental_rerun()
             if col4.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
+                st.experimental_rerun()
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
+            st.experimental_rerun()
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
