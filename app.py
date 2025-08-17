@@ -244,7 +244,10 @@ with tab1:
 # =========================
 # Tab 2
 # =========================
-with tab2: st.write("Cole sua decklist abaixo (uma carta por linha):") deck_input = st.text_area("Decklist", height=300)
+with tab2:
+    st.write("Cole sua decklist abaixo (uma carta por linha):")
+    deck_input = st.text_area("Decklist", height=300)
+
 
 if deck_input.strip():
     lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
@@ -303,6 +306,7 @@ else:
 
 st.markdown("---")
 st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
