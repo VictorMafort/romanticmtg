@@ -1,12 +1,7 @@
 import streamlit as st
 import requests
 import urllib.parse
-
-# 🔹 Estado inicial no topo
-if "deck" not in st.session_state:
-    st.session_state.deck = {}
-if "outra_coisa" not in st.session_state:
-    st.session_state.outra_coisa = None
+from concurrent.futures import ThreadPoolExecutor
 
 # =========================
 # Config & listas
@@ -48,7 +43,7 @@ def buscar_sugestoes(query):
         r2 = requests.get(url_any, timeout=8)
         if r2.status_code == 200:
             return [s for s in r2.json().get("data", []) if "token" not in s.lower()]
-    except requests.exceptions.RequestException:
+    except:
         pass
     return []
 
@@ -58,7 +53,7 @@ def fetch_card_data(card_name):
     url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
     try:
         resp = requests.get(url, timeout=8)
-    except requests.exceptions.RequestException:
+    except:
         return None
     if resp.status_code != 200:
         return None
@@ -85,10 +80,10 @@ def fetch_card_data(card_name):
                 "mana": data.get("mana_cost",""),
                 "oracle": data.get("oracle_text","")
             }
-    except requests.exceptions.RequestException:
+    except:
         pass
 
-    # Busca completa por prints
+    # Busca completa por prints (early stop se achar set permitido)
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -105,7 +100,7 @@ def fetch_card_data(card_name):
                         break
             else:
                 next_page = j.get("next_page")
-        except requests.exceptions.RequestException:
+        except:
             break
 
     return {
@@ -124,24 +119,17 @@ def check_legality(name, sets):
         return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
-def add_card(card_name, qty=1):
-    st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
-
-def remove_card(card_name, qty=1):
-    if card_name in st.session_state.deck:
-        st.session_state.deck[card_name] -= qty
-        if st.session_state.deck[card_name] <= 0:
-            del st.session_state.deck[card_name]
-
 # =========================
 # App
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS
+# CSS apenas para o grid de sugestões
 st.markdown("""
 <style>
-.sug-card { position: relative; }
+.sug-card {
+    position: relative;
+}
 .overlay-btns {
     position: absolute;
     top: 20%;
@@ -154,7 +142,9 @@ st.markdown("""
     opacity: 0;
     transition: opacity 0.2s ease;
 }
-.sug-card:hover .overlay-btns { opacity: 1; }
+.sug-card:hover .overlay-btns {
+    opacity: 1;
+}
 .btn-group {
     display: flex;
     border: 1px solid black;
@@ -174,9 +164,24 @@ st.markdown("""
     cursor: pointer;
     border: none;
 }
-.btn:hover { background-color: #e6e6e6; }
+.btn:hover {
+    background-color: #e6e6e6;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Estado do deck
+if "deck" not in st.session_state:
+    st.session_state.deck = {}
+
+def add_card(card_name, qty=1):
+    st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
+
+def remove_card(card_name, qty=1):
+    if card_name in st.session_state.deck:
+        st.session_state.deck[card_name] -= qty
+        if st.session_state.deck[card_name] <= 0:
+            del st.session_state.deck[card_name]
 
 st.title("🧙 Romantic Format Tools")
 tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder"])
@@ -200,11 +205,14 @@ with tab1:
         value=picked or ""
     )
     card_input = picked or None
+
+    # Sempre inicialize
     thumbs = []
 
     if query.strip():
-        sugestoes = buscar_sugestoes(query.strip())
-        for nome in sugestoes[:21]:
+        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
+
+        for nome in sugestoes[:21]:  # mostra até 21 sugestões
             data = fetch_card_data(nome)
             if data and data.get("image"):
                 status_text, status_type = check_legality(
@@ -218,29 +226,36 @@ with tab1:
         for i in range(0, len(thumbs), cols_per_row):
             cols = st.columns(cols_per_row)
             for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+                color = {
+                    "success": "green",
+                    "warning": "orange",
+                    "danger": "red"
+                }[status_type]
 
                 with cols[idx]:
+                    # Imagem da carta
                     st.image(img, use_container_width=True)
+
+                    # Status (legal, banned, warning)
                     st.markdown(
                         f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
                         unsafe_allow_html=True
                     )
 
+                    # Quatro botões: -4, -1, +1, +4 (chaves estáveis)
                     colA, colB, colC, colD = st.columns(4)
-                    if colA.button("-4", key=f"sub4_{i}_{idx}"):
-                        remove_card(nome, 4)
-                        st.experimental_rerun()
-                    if colB.button("-1", key=f"sub1_{i}_{idx}"):
-                        remove_card(nome, 1)
-                        st.experimental_rerun()
-                    if colC.button("+1", key=f"add1_{i}_{idx}"):
-                        add_card(nome, 1)
-                        st.experimental_rerun()
-                    if colD.button("+4", key=f"add4_{i}_{idx}"):
-                        add_card(nome, 4)
-                        st.experimental_rerun()
 
+                    if colA.button("-4", key=f"sub4_{i}_{idx}_{nome}"):
+                        remove_card(nome, 4)
+
+                    if colB.button("-1", key=f"sub1_{i}_{idx}_{nome}"):
+                        remove_card(nome, 1)
+
+                    if colC.button("+1", key=f"add1_{i}_{idx}_{nome}"):
+                        add_card(nome, 1)
+
+                    if colD.button("+4", key=f"add4_{i}_{idx}_{nome}"):
+                        add_card(nome, 4)
 # =========================
 # Tab 2
 # =========================
@@ -248,35 +263,33 @@ with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
 
+    if deck_input.strip():
+        lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
 
-if deck_input.strip():
-    lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
+        def process_line(line):
+            parts = line.split(" ", 1)
+            name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
+            card = fetch_card_data(name_guess)
+            if not card:
+                return (line, "❌ Card not found or API error", "danger", None)
+            status_text, status_type = check_legality(card["name"], card["sets"])
+            return (card["name"], status_text, status_type, card["sets"])
 
-    def process_line(line):
-        parts = line.split(" ", 1)
-        name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
-        card = fetch_card_data(name_guess)
-        if not card:
-            return (line, "❌ Card not found or API error", "danger", None)
-        status_text, status_type = check_legality(card["name"], card["sets"])
-        return (card["name"], status_text, status_type, card["sets"])
+        with st.spinner("Checando decklist..."):
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(process_line, lines))
 
-    with st.spinner("Checando decklist..."):
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            results = list(executor.map(process_line, lines))
-
-    st.subheader("📋 Resultados:")
-    for name, status_text, status_type, sets in results:
-        color = {
-            "success": "green",
-            "warning": "orange",
-            "danger": "red"
-        }[status_type]
-        st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>",
-                    unsafe_allow_html=True)
-        with st.expander(f"🗒️ Sets para {name} (debug)"):
-            st.write(sorted(sets) if sets else "Nenhum set encontrado")
-			
+        st.subheader("📋 Resultados:")
+        for name, status_text, status_type, sets in results:
+            color = {
+                "success": "green",
+                "warning": "orange",
+                "danger": "red"
+            }[status_type]
+            st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>",
+                        unsafe_allow_html=True)
+            with st.expander(f"🗒️ Sets para {name} (debug)"):
+                st.write(sorted(sets) if sets else "Nenhum set encontrado")
 				
 # =========================
 # Tab 3 - Deckbuilder
@@ -284,30 +297,30 @@ if deck_input.strip():
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
-if not st.session_state.deck:
-    st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
-else:
-    for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
-        col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-        col1.markdown(f"**{card}**")
-        col2.markdown(f"**x{qty}**")
-        if col3.button("➖", key=f"minus_{card}"):
-            remove_card(card, 1)
-            st.session_state.rerun = True
-        if col4.button("➕", key=f"plus_{card}"):
-            add_card(card, 1)
-            st.session_state.rerun = True
+    if not st.session_state.deck:
+        st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
+    else:
+        # Itere sobre uma cópia ordenada para ter UI estável durante mudanças
+        for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
+            col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+
+            col1.markdown(f"**{card}**")
+            col2.markdown(f"**x{qty}**")
+
+            # Invertido: subtrair vem antes de adicionar
+            if col3.button("➖", key=f"minus_{card}"):
+                remove_card(card, 1)
+
+            if col4.button("➕", key=f"plus_{card}"):
+                add_card(card, 1)
+
+        st.markdown("---")
+        if st.button("🗑️ Limpar Deck", key="clear_deck"):
+            st.session_state.deck.clear()
+            st.success("Deck limpo!")
 
     st.markdown("---")
-    if st.button("🗑️ Limpar Deck", key="clear_deck"):
-        st.session_state.deck.clear()
-        st.success("Deck limpo!")
-        st.session_state.rerun = True
-
-st.markdown("---")
-st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
-
-
+    st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
 
 
 
