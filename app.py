@@ -292,27 +292,32 @@ with tab2:
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
 				
 # =========================
-# Tab 3 - Deckbuilder
+# Tab 3 - Deckbuilder (botões invertidos)
 # =========================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
+    total_cartas = sum(st.session_state.deck.values())
+
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
+        st.markdown(f"**Total de cartas no deck:** {total_cartas}")
+        st.markdown("---")
+
         for card, qty in st.session_state.deck.items():
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
-            if col3.button("➕", key=f"plus_{card}"):
-                add_card(card, 1)
-            if col4.button("➖", key=f"minus_{card}"):
-                remove_card(card, 1)
+
+            # Agora o botão de remover vem antes do de adicionar
+            if col3.button("➖", key=f"minus_{card}"):
+                remove_card(card, 1)  # subtrai 1
+            if col4.button("➕", key=f"plus_{card}"):
+                add_card(card, 1)     # soma 1
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
 
-    st.markdown("---")
-    st.caption("Dica: use a Aba 1 para pesquisar cartas e adicioná-las rapidamente ao deck.")
