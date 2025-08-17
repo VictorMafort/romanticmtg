@@ -174,9 +174,22 @@ st.markdown("""
 if "deck" not in st.session_state:
     st.session_state.deck = {}
 
-# Estado do catálogo (lista de cartas)
+# Função para carregar o catálogo inicial de cartas
+@st.cache_data(show_spinner=False)
+def carregar_catalogo_inicial():
+    url = "https://api.scryfall.com/catalog/card-names"
+    try:
+        resp = requests.get(url, timeout=8)
+        if resp.status_code == 200:
+            # Retorna a lista de nomes (já filtrando se quiser)
+            return [name for name in resp.json().get("data", []) if "token" not in name.lower()]
+    except:
+        pass
+    return []
+
+# Estado do catálogo
 if "catalog" not in st.session_state:
-    st.session_state.catalog = []  # ou carregue sua lista inicial aqui
+    st.session_state.catalog = carregar_catalogo_inicial()
 
 def add_card(card_name, qty=1):
     st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
@@ -297,5 +310,6 @@ with tab3:
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.experimental_rerun()
+
 
 
