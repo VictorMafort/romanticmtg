@@ -128,39 +128,31 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.markdown("""
 <style>
 .sug-card {
-  position: relative;
-  display: block;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 4px;
-  text-decoration: none !important;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
-}
-.sug-card img {
-  width: 100%;
-  display: block;
-  border-radius: 6px;
-}
-.sug-card:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-  border-color: rgba(255, 215, 0, 0.6);
-  background-color: rgba(255, 255, 255, 0.04);
+    position: relative;
 }
 .overlay-btns {
     position: absolute;
-    top: 20%; /* cobre a arte, mas não o texto */
+    top: 20%;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 4px; /* espaçamento pequeno entre botões */
+    gap: 4px;
     z-index: 5;
+    opacity: 0; /* oculto por padrão */
+    transition: opacity 0.2s ease;
 }
-
+.sug-card:hover .overlay-btns {
+    opacity: 1; /* aparece no hover */
+}
+.btn-group {
+    display: flex;
+    border: 1px solid black; /* contorno preto no grupo */
+    border-radius: 4px;
+    overflow: hidden;
+}
 .btn {
-    background-color: rgba(255,255,255,0.95);
+    background-color: white;
     color: black;
     font-weight: bold;
     font-size: 0.8em;
@@ -169,14 +161,13 @@ st.markdown("""
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #ccc;
-    border-radius: 4px;
     cursor: pointer;
+    border: none; /* sem borda individual, só no grupo */
+}
+.btn:hover {
+    background-color: #e6e6e6;
 }
 
-.btn:hover {
-    background-color: rgba(230,230,230,1);
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -232,11 +223,15 @@ if thumbs:
 <div class="sug-card">
     <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
     <div class="overlay-btns">
-        <div class="btn minus">-1</div>
-        <div class="btn plus">+1</div>
-        <div style="width: 12px;"></div> <!-- espaço entre os pares -->
-        <div class="btn minus">-4</div>
-        <div class="btn plus">+4</div>
+        <div class="btn-group">
+            <div class="btn minus">-1</div>
+            <div class="btn plus">+1</div>
+        </div>
+        <div style="width: 12px;"></div> <!-- espaço entre grupos -->
+        <div class="btn-group">
+            <div class="btn minus">-4</div>
+            <div class="btn plus">+4</div>
+        </div>
     </div>
     <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
         {status_text}
@@ -273,6 +268,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
