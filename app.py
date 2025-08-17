@@ -215,24 +215,30 @@ if thumbs:
     for i in range(0, len(thumbs), cols_per_row):
         cols = st.columns(cols_per_row)
         for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-            color = {
-                "success": "green",
-                "warning": "orange",
-                "danger": "red"
-            }[status_type]
-            href = f"?pick={urllib.parse.quote(nome)}"
-            html = f'''
+    color = {
+        "success": "green",
+        "warning": "orange",
+        "danger": "red"
+    }[status_type]
+
+    # Links para adicionar/remover cartas
+    href_add1 = f"?add={urllib.parse.quote(nome)}&qty=1"
+    href_add4 = f"?add={urllib.parse.quote(nome)}&qty=4"
+    href_rem1 = f"?remove={urllib.parse.quote(nome)}&qty=1"
+    href_rem4 = f"?remove={urllib.parse.quote(nome)}&qty=4"
+
+    html = f'''
 <div class="sug-card">
     <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
     <div class="overlay-btns">
         <div class="btn-group">
-            <div class="btn minus">-1</div>
-            <div class="btn plus">+1</div>
+            <a href="{href_rem1}" class="btn minus">-1</a>
+            <a href="{href_add1}" class="btn plus">+1</a>
         </div>
-        <div style="width: 12px;"></div> <!-- espaço entre grupos -->
+        <div style="width: 12px;"></div>
         <div class="btn-group">
-            <div class="btn minus">-4</div>
-            <div class="btn plus">+4</div>
+            <a href="{href_rem4}" class="btn minus">-4</a>
+            <a href="{href_add4}" class="btn plus">+4</a>
         </div>
     </div>
     <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
@@ -240,7 +246,8 @@ if thumbs:
     </div>
 </div>
 '''
-            cols[idx].markdown(html, unsafe_allow_html=True)
+
+    cols[idx].markdown(html, unsafe_allow_html=True)
 # =========================
 # Tab 2
 # =========================
@@ -310,6 +317,7 @@ with tab3:
             st.write(f"**{qty}x** {card}")
     else:
         st.write("Seu deck está vazio. Adicione cartas na Tab 1.")
+
 
 
 
