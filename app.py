@@ -124,29 +124,30 @@ def check_legality(name, sets):
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS básico para caixinhas clicáveis
+# CSS apenas para o grid de sugestões
 st.markdown("""
 <style>
 .sug-card {
-  background-color: #f6f6f6;
-  border: 1px solid #d0d0d0;
-  border-radius: 10px;
-  padding: 4px;
-  transition: transform .05s ease, box-shadow .1s ease;
   display: block;
+  background: #f6f6f6;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  padding: 4px;
   text-decoration: none !important;
-}
-.sug-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,.15);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .sug-card img {
   width: 100%;
-  border-radius: 6px;
   display: block;
+  border-radius: 6px;
+}
+.sug-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 st.title("🧙 Romantic Format Tools")
 tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
@@ -234,6 +235,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
