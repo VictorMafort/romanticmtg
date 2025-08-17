@@ -154,13 +154,13 @@ tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 # Captura de clique via query param (?pick=Nome)
 picked = None
 try:
-    params = st.experimental_get_query_params()
+    params = st.query_params
     if "pick" in params and params["pick"]:
         picked = params["pick"][0]
-        # limpa o pick da URL pra não ficar preso
-        st.experimental_set_query_params()
+        st.query_params.clear()  # limpa a URL
 except Exception:
     pass
+
 
 # =========================
 # Tab 1
@@ -250,4 +250,5 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
