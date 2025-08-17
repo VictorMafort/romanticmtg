@@ -235,7 +235,11 @@ for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_
         <div style="width: 12px;"></div>
         <div class="btn-group">
             <a href="{href_rem4}" class="btn minus">-4</a>
-            <a href="{href_add4}" class="btn plus
+            <a href="{href_add4}" class="btn plus">+4</a>
+        </div>
+    </div>
+</div>
+'''
 # =========================
 # Tab 2
 # =========================
@@ -305,6 +309,7 @@ with tab3:
             st.write(f"**{qty}x** {card}")
     else:
         st.write("Seu deck está vazio. Adicione cartas na Tab 1.")
+
 
 
 
