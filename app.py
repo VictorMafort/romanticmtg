@@ -2,6 +2,9 @@ import streamlit as st
 import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+import re
+from concurrent.futures import ThreadPoolExecutor
+
 
 # =========================
 # Config & listas
@@ -259,12 +262,6 @@ with tab1:
 # =========================
 # Tab 2
 # =========================
-import re
-from concurrent.futures import ThreadPoolExecutor
-
-# =========================
-# Tab 2
-# =========================
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
@@ -275,35 +272,43 @@ with tab2:
         def process_line(line):
             # Aceita formatos: "4x Tarmogoyf", "4 Tarmogoyf", "Tarmogoyf"
             match = re.match(r"^(\d+)\s*x?\s*(.*)$", line.strip(), re.IGNORECASE)
-            name_guess = match.group(2) if match else line.strip()
+            if match:
+                qty = int(match.group(1))
+                name_guess = match.group(2)
+            else:
+                qty = 1
+                name_guess = line.strip()
 
             card = fetch_card_data(name_guess)
             if not card:
-                return (line, "❌ Card not found or API error", "danger", None)
+                return (line, qty, "❌ Card not found or API error", "danger", None)
             status_text, status_type = check_legality(card["name"], card["sets"])
-            return (card["name"], status_text, status_type, card["sets"])
+            return (card["name"], qty, status_text, status_type, card["sets"])
 
         with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
 
         st.subheader("📋 Resultados:")
-        for name, status_text, status_type, sets in results:
+        for name, qty, status_text, status_type, _ in results:
             color = {
                 "success": "green",
                 "warning": "orange",
                 "danger": "red"
             }[status_type]
             st.markdown(
-                f"{name}: <span style='color:{color}'>{status_text}</span>",
+                f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>",
                 unsafe_allow_html=True
             )
-            with st.expander(f"🗒️ Sets para {name} (debug)"):
-                st.write(sorted(sets) if sets else "Nenhum set encontrado")
-				
-# =========================
-# Tab 3 - Deckbuilder
-# =========================
+
+        # Botão para adicionar toda a decklist ao deckbuilder
+        if st.button("📥 Adicionar lista ao Deckbuilder"):
+            for name, qty, status_text, status_type, _ in results:
+                if status_type != "danger":  # só adiciona se não for erro
+                    st.session_state.deck[name] = st.session_state.deck.get(name, 0) + qty
+            st.success("Decklist adicionada ao Deckbuilder!")
+
+
 # =========================
 # Tab 3 - Deckbuilder
 # =========================
@@ -361,6 +366,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
