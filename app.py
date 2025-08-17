@@ -197,8 +197,6 @@ with tab1:
     )
     card_input = picked or None
 
-    thumbs = []
-    
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())  # busca clássica
 
@@ -215,30 +213,24 @@ if thumbs:
     for i in range(0, len(thumbs), cols_per_row):
         cols = st.columns(cols_per_row)
         for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-    color = {
-        "success": "green",
-        "warning": "orange",
-        "danger": "red"
-    }[status_type]
-
-    # Links para adicionar/remover cartas
-    href_add1 = f"?add={urllib.parse.quote(nome)}&qty=1"
-    href_add4 = f"?add={urllib.parse.quote(nome)}&qty=4"
-    href_rem1 = f"?remove={urllib.parse.quote(nome)}&qty=1"
-    href_rem4 = f"?remove={urllib.parse.quote(nome)}&qty=4"
-
-    html = f'''
+            color = {
+                "success": "green",
+                "warning": "orange",
+                "danger": "red"
+            }[status_type]
+            href = f"?pick={urllib.parse.quote(nome)}"
+            html = f'''
 <div class="sug-card">
     <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
     <div class="overlay-btns">
         <div class="btn-group">
-            <a href="{href_rem1}" class="btn minus">-1</a>
-            <a href="{href_add1}" class="btn plus">+1</a>
+            <div class="btn minus">-1</div>
+            <div class="btn plus">+1</div>
         </div>
-        <div style="width: 12px;"></div>
+        <div style="width: 12px;"></div> <!-- espaço entre grupos -->
         <div class="btn-group">
-            <a href="{href_rem4}" class="btn minus">-4</a>
-            <a href="{href_add4}" class="btn plus">+4</a>
+            <div class="btn minus">-4</div>
+            <div class="btn plus">+4</div>
         </div>
     </div>
     <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
@@ -246,8 +238,7 @@ if thumbs:
     </div>
 </div>
 '''
-
-    cols[idx].markdown(html, unsafe_allow_html=True)
+            cols[idx].markdown(html, unsafe_allow_html=True)
 # =========================
 # Tab 2
 # =========================
@@ -277,46 +268,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
-# =========================
-# Deckbuilder (Tab 3)
-# =========================
 
-# Inicializa o deck no session_state
-if "deck" not in st.session_state:
-    st.session_state.deck = {}
-
-# Funções para manipular o deck
-def add_card(card_name, qty=1):
-    st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
-
-def remove_card(card_name, qty=1):
-    if card_name in st.session_state.deck:
-        st.session_state.deck[card_name] -= qty
-        if st.session_state.deck[card_name] <= 0:
-            del st.session_state.deck[card_name]
-
-# Captura comandos de adição/remoção via query params
-try:
-    params = st.query_params
-    if "add" in params:
-        add_card(params["add"][0], int(params.get("qty", [1])[0]))
-        st.query_params.clear()
-    elif "remove" in params:
-        remove_card(params["remove"][0], int(params.get("qty", [1])[0]))
-        st.query_params.clear()
-except:
-    pass
-
-# Adiciona a Tab 3
-tab3 = st.tabs(["🧙 Deckbuilder"])[0]
-
-with tab3:
-    st.header("🧙‍♂️ Seu Deck")
-    if st.session_state.deck:
-        for card, qty in st.session_state.deck.items():
-            st.write(f"**{qty}x** {card}")
-    else:
-        st.write("Seu deck está vazio. Adicione cartas na Tab 1.")
 
 
 
