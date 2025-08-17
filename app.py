@@ -294,6 +294,9 @@ with tab2:
 # =========================
 # Tab 3 - Deckbuilder
 # =========================
+# =========================
+# Tab 3 - Deckbuilder
+# =========================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
@@ -301,40 +304,54 @@ with tab3:
     total_cartas = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total_cartas}")
 
-    # Captura qual carta foi alterada por último
-    if "last_changed" not in st.session_state:
-        st.session_state.last_changed = None
+    # Guardar a última carta alterada e a ação (add/remove)
+    if "last_change" not in st.session_state:
+        st.session_state.last_change = None
+    if "last_action" not in st.session_state:
+        st.session_state.last_action = None
 
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        # Iterar sobre cópia ordenada para UI estável
         for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
 
-            # Destaca se foi a última carta alterada
-            if st.session_state.last_changed == card:
-                col1.markdown(f"<div style='background-color:#fff3cd;padding:4px;border-radius:4px;'><b>{card}</b></div>", unsafe_allow_html=True)
+            # Nome normal
+            col1.markdown(f"**{card}**")
+
+            # Quantidade com highlight se foi a última alterada
+            if st.session_state.last_change == card:
+                if st.session_state.last_action == "add":
+                    col2.markdown(f"<span style='color:green;font-weight:bold;'>x{qty}</span>", unsafe_allow_html=True)
+                elif st.session_state.last_action == "remove":
+                    col2.markdown(f"<span style='color:red;font-weight:bold;'>x{qty}</span>", unsafe_allow_html=True)
+                else:
+                    col2.markdown(f"**x{qty}**")
             else:
-                col1.markdown(f"**{card}**")
+                col2.markdown(f"**x{qty}**")
 
-            col2.markdown(f"**x{qty}**")
-
+            # Botão de remover
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
-                st.session_state.last_changed = card
+                st.session_state.last_change = card
+                st.session_state.last_action = "remove"
+
+            # Botão de adicionar
             if col4.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
-                st.session_state.last_changed = card
+                st.session_state.last_change = card
+                st.session_state.last_action = "add"
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck", key="clear_deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
-            st.session_state.last_changed = None
+            st.session_state.last_change = None
+            st.session_state.last_action = None
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
