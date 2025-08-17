@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 
 # Allowed sets for Romantic format
 allowed_sets = {
@@ -50,11 +51,6 @@ def fetch_card_data(card_name):
 
     try:
         resp = requests.get(url, timeout=8)
-    except requests.Timeout:
-        try:
-            resp = requests.get(url, timeout=8)
-        except requests.RequestException as e:
-            return None
     except requests.RequestException:
         return None
 
@@ -66,9 +62,29 @@ def fetch_card_data(card_name):
         return None
 
     all_sets = set()
-    next_page = data["prints_search_uri"]
 
-    # 🚀 Para assim que encontrar um set permitido
+    # 🚀 Busca rápida: todos os sets permitidos em uma query só
+    set_query = " OR ".join(s.lower() for s in allowed_sets)
+    quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
+    try:
+        quick_resp = requests.get(quick_url, timeout=8)
+        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards", 0) > 0:
+            for c in quick_resp.json().get("data", []):
+                if "Token" not in c.get("type_line", ""):
+                    all_sets.add(c["set"].upper())
+            return {
+                "name": data.get("name", ""),
+                "sets": all_sets,
+                "image": data.get("image_uris", {}).get("normal", None),
+                "type": data.get("type_line", ""),
+                "mana": data.get("mana_cost", ""),
+                "oracle": data.get("oracle_text", "")
+            }
+    except requests.RequestException:
+        pass
+
+    # 🐢 Busca lenta: prints completos, parando no primeiro permitido
+    next_page = data["prints_search_uri"]
     while next_page:
         try:
             p = requests.get(next_page, timeout=8)
@@ -140,9 +156,8 @@ with tab1:
                 st.markdown(f"**Mana Cost:** {card['mana']}")
                 st.markdown(f"**Oracle Text:** {card['oracle']}")
 
-            if status_type == "warning":
-                with st.expander("🗒️ Print sets found (for debugging)"):
-                    st.write(sorted(card["sets"]))
+            with st.expander("🗒️ Print sets found (debug)"):
+                st.write(sorted(card["sets"]))
 
 # Tab 2
 with tab2:
@@ -151,23 +166,23 @@ with tab2:
 
     if deck_input:
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
-        results = []
+
+        def process_line(line):
+            parts = line.split(" ", 1)
+            name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
+            card = fetch_card_data(name_guess)
+            if not card:
+                return (line, "❌ Card not found or API error", "danger", None)
+            status_text, status_type = check_legality(card["name"], card["sets"])
+            return (card["name"], status_text, status_type, card["sets"])
 
         with st.spinner("Checking decklist..."):
-            for line in lines:
-                parts = line.split(" ", 1)
-                name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
-                card = fetch_card_data(name_guess)
-                if not card:
-                    results.append((line, "❌ Card not found or API error", "danger", None))
-                else:
-                    status_text, status_type = check_legality(card["name"], card["sets"])
-                    results.append((card["name"], status_text, status_type, card["sets"]))
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(process_line, lines))
 
         st.subheader("📋 Decklist Results:")
         for name, status_text, status_type, sets in results:
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
-            if status_type == "warning" and sets:
-                with st.expander(f"🗒️ Print sets for {name} (debug)"):
-                    st.write(sorted(sets))
+            with st.expander(f"🗒️ Print sets for {name} (debug)"):
+                st.write(sorted(sets) if sets else "Nenhum set encontrado")
