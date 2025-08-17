@@ -297,31 +297,45 @@ with tab2:
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
-    # Botão: marca flag para atualizar
-    if st.button("🔄 Atualizar Deck", key="refresh_deck_btn"):
-        st.session_state.refresh_deck = True
+    # Total de cartas no deck
+    total_cartas = sum(st.session_state.deck.values())
+    st.markdown(f"**Total de cartas:** {total_cartas}")
 
-    # Se a flag foi marcada, faz o rerun e limpa
-    if st.session_state.refresh_deck:
-        st.session_state.refresh_deck = False
-        st.experimental_rerun()
+    # Captura qual carta foi alterada por último
+    if "last_changed" not in st.session_state:
+        st.session_state.last_changed = None
 
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
+        # Iterar sobre cópia ordenada para UI estável
         for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-            col1.markdown(f"**{card}**")
+
+            # Destaca se foi a última carta alterada
+            if st.session_state.last_changed == card:
+                col1.markdown(f"<div style='background-color:#fff3cd;padding:4px;border-radius:4px;'><b>{card}</b></div>", unsafe_allow_html=True)
+            else:
+                col1.markdown(f"**{card}**")
+
             col2.markdown(f"**x{qty}**")
+
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
+                st.session_state.last_changed = card
             if col4.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
+                st.session_state.last_changed = card
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck", key="clear_deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
+            st.session_state.last_changed = None
+
+    st.markdown("---")
+    st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
