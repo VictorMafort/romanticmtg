@@ -3,6 +3,11 @@ import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+# 🔄 Força rerun seguro se algum botão marcou
+if st.session_state.get("rerun", False):
+    st.session_state.rerun = False
+    st.experimental_rerun()
+
 # =========================
 # Config & listas
 # =========================
@@ -205,14 +210,11 @@ with tab1:
         value=picked or ""
     )
     card_input = picked or None
-
-    # Sempre inicialize
     thumbs = []
 
     if query.strip():
-        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
-
-        for nome in sugestoes[:21]:  # mostra até 21 sugestões
+        sugestoes = buscar_sugestoes(query.strip())
+        for nome in sugestoes[:21]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
                 status_text, status_type = check_legality(
@@ -226,36 +228,28 @@ with tab1:
         for i in range(0, len(thumbs), cols_per_row):
             cols = st.columns(cols_per_row)
             for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                color = {
-                    "success": "green",
-                    "warning": "orange",
-                    "danger": "red"
-                }[status_type]
+                color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
 
                 with cols[idx]:
-                    # Imagem da carta
                     st.image(img, use_container_width=True)
-
-                    # Status (legal, banned, warning)
                     st.markdown(
                         f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
                         unsafe_allow_html=True
                     )
 
-                    # Quatro botões: -4, -1, +1, +4 (chaves estáveis)
                     colA, colB, colC, colD = st.columns(4)
-
-                    if colA.button("-4", key=f"sub4_{i}_{idx}_{nome}"):
+                    if colA.button("-4", key=f"sub4_{i}_{idx}"):
                         remove_card(nome, 4)
-
-                    if colB.button("-1", key=f"sub1_{i}_{idx}_{nome}"):
+                        st.session_state.rerun = True
+                    if colB.button("-1", key=f"sub1_{i}_{idx}"):
                         remove_card(nome, 1)
-
-                    if colC.button("+1", key=f"add1_{i}_{idx}_{nome}"):
+                        st.session_state.rerun = True
+                    if colC.button("+1", key=f"add1_{i}_{idx}"):
                         add_card(nome, 1)
-
-                    if colD.button("+4", key=f"add4_{i}_{idx}_{nome}"):
+                        st.session_state.rerun = True
+                    if colD.button("+4", key=f"add4_{i}_{idx}"):
                         add_card(nome, 4)
+                        st.session_state.rerun = True
 # =========================
 # Tab 2
 # =========================
@@ -300,27 +294,26 @@ with tab3:
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        # Itere sobre uma cópia ordenada para ter UI estável durante mudanças
         for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
-
-            # Invertido: subtrair vem antes de adicionar
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
-
+                st.session_state.rerun = True
             if col4.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
+                st.session_state.rerun = True
 
         st.markdown("---")
         if st.button("🗑️ Limpar Deck", key="clear_deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
+            st.session_state.rerun = True
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
