@@ -36,13 +36,14 @@ def buscar_sugestoes(query):
         if r.status_code == 200:
             return r.json().get("data", [])
         else:
-            st.warning(f"⚠️ API respondeu com {r.status_code} ao buscar sugestões")
+            st.warning(f"⚠️ API retornou {r.status_code} ao buscar sugestões")
     except requests.Timeout:
         st.warning("⏳ Tempo esgotado ao buscar sugestões")
     except requests.RequestException as e:
         st.error(f"❌ Erro na conexão: {e}")
     return []
 
+@st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
     safe_name = urllib.parse.quote(card_name)
     url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
@@ -50,47 +51,40 @@ def fetch_card_data(card_name):
     try:
         resp = requests.get(url, timeout=8)
     except requests.Timeout:
-        st.warning(f"⏳ Timeout ao buscar '{card_name}', tentando de novo...")
         try:
             resp = requests.get(url, timeout=8)
-        except requests.Timeout:
-            st.error(f"❌ API não respondeu a tempo para '{card_name}'")
-            return None
         except requests.RequestException as e:
-            st.error(f"❌ Erro de conexão na segunda tentativa: {e}")
             return None
-    except requests.RequestException as e:
-        st.error(f"❌ Erro de conexão: {e}")
+    except requests.RequestException:
         return None
 
     if resp.status_code != 200:
-        st.warning(f"⚠️ API respondeu com {resp.status_code} para '{card_name}'")
         return None
 
     data = resp.json()
     if "prints_search_uri" not in data:
-        st.warning(f"⚠️ Resposta inesperada da API para '{card_name}'")
         return None
 
     all_sets = set()
     next_page = data["prints_search_uri"]
 
+    # 🚀 Para assim que encontrar um set permitido
     while next_page:
         try:
             p = requests.get(next_page, timeout=8)
             if p.status_code != 200:
-                st.warning(f"⚠️ API retornou {p.status_code} ao buscar prints")
                 break
             j = p.json()
             for c in j["data"]:
                 if "Token" not in c.get("type_line", ""):
-                    all_sets.add(c["set"].upper())
-            next_page = j.get("next_page", None)
-        except requests.Timeout:
-            st.warning("⏳ Timeout ao buscar prints")
-            break
-        except requests.RequestException as e:
-            st.error(f"❌ Erro ao buscar prints: {e}")
+                    set_code = c["set"].upper()
+                    all_sets.add(set_code)
+                    if set_code in allowed_sets:
+                        next_page = None
+                        break
+            else:
+                next_page = j.get("next_page", None)
+        except requests.RequestException:
             break
 
     return {
