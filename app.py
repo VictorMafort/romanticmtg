@@ -139,15 +139,15 @@ st.markdown("""
     align-items: center;
     gap: 4px;
     z-index: 5;
-    opacity: 0; /* oculto por padrão */
+    opacity: 0;
     transition: opacity 0.2s ease;
 }
 .sug-card:hover .overlay-btns {
-    opacity: 1; /* aparece no hover */
+    opacity: 1;
 }
 .btn-group {
     display: flex;
-    border: 1px solid black; /* contorno preto no grupo */
+    border: 1px solid black;
     border-radius: 4px;
     overflow: hidden;
 }
@@ -162,18 +162,29 @@ st.markdown("""
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: none; /* sem borda individual, só no grupo */
+    border: none;
 }
 .btn:hover {
     background-color: #e6e6e6;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
+# Estado do deck
+if "deck" not in st.session_state:
+    st.session_state.deck = {}
+
+def add_card(card_name, qty=1):
+    st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
+
+def remove_card(card_name, qty=1):
+    if card_name in st.session_state.deck:
+        st.session_state.deck[card_name] -= qty
+        if st.session_state.deck[card_name] <= 0:
+            del st.session_state.deck[card_name]
 
 st.title("🧙 Romantic Format Tools")
-tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
+tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder"])
 
 # Captura de clique via query param (?pick=Nome)
 picked = None
@@ -181,15 +192,13 @@ try:
     params = st.query_params
     if "pick" in params and params["pick"]:
         picked = params["pick"][0]
-        st.query_params.clear()  # limpa a URL
+        st.query_params.clear()
 except Exception:
     pass
-
-
+	
 # =========================
-# Tab 1
+# Tab 1 - Single Card Checker
 # =========================
-
 with tab1:
     query = st.text_input(
         "Digite o começo do nome da carta:",
@@ -198,49 +207,49 @@ with tab1:
     card_input = picked or None
 
     thumbs = []
-    
-    if query.strip():
-        sugestoes = buscar_sugestoes(query.strip())  # busca clássica
 
-        thumbs = []
-        for nome in sugestoes[:21]:  # <- agora até 21
+    if query.strip():
+        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
+
+        for nome in sugestoes[:21]:  # mostra até 21 sugestões
             data = fetch_card_data(nome)
             if data and data.get("image"):
-                status_text, status_type = check_legality(data["name"], data.get("sets", []))
+                status_text, status_type = check_legality(
+                    data["name"], data.get("sets", [])
+                )
                 thumbs.append((nome, data["image"], status_text, status_type))
 
-if thumbs:
-    st.caption("🔍 Sugestões:")
-    cols_per_row = 3
-    for i in range(0, len(thumbs), cols_per_row):
-        cols = st.columns(cols_per_row)
-        for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-            color = {
-                "success": "green",
-                "warning": "orange",
-                "danger": "red"
-            }[status_type]
-            href = f"?pick={urllib.parse.quote(nome)}"
-            html = f'''
-<div class="sug-card">
-    <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
-    <div class="overlay-btns">
-        <div class="btn-group">
-            <div class="btn minus">-1</div>
-            <div class="btn plus">+1</div>
-        </div>
-        <div style="width: 12px;"></div> <!-- espaço entre grupos -->
-        <div class="btn-group">
-            <div class="btn minus">-4</div>
-            <div class="btn plus">+4</div>
-        </div>
-    </div>
-    <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
-        {status_text}
-    </div>
-</div>
-'''
-            cols[idx].markdown(html, unsafe_allow_html=True)
+    if thumbs:
+        st.caption("🔍 Sugestões:")
+        cols_per_row = 3
+        for i in range(0, len(thumbs), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+                color = {
+                    "success": "green",
+                    "warning": "orange",
+                    "danger": "red"
+                }[status_type]
+
+                with cols[idx]:
+                    # Imagem da carta
+                    st.image(img, use_container_width=True)
+
+                    # Status (legal, banned, warning)
+                    st.markdown(
+                        f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
+                        unsafe_allow_html=True
+                    )
+
+                    # Botões para adicionar no deckbuilder
+                    colA, colB = st.columns(2)
+                    with colA:
+                        if st.button("+1", key=f"add1_{i}_{idx}"):
+                            add_card(nome, 1)
+                    with colB:
+                        if st.button("+4", key=f"add4_{i}_{idx}"):
+                            add_card(nome, 4)
+
 # =========================
 # Tab 2
 # =========================
@@ -252,11 +261,11 @@ with tab2:
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
 
         def process_line(line):
-            parts = line.split(" ",1)
-            name_guess = parts[1] if parts[0].isdigit() and len(parts)>1 else line
+            parts = line.split(" ", 1)
+            name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
             card = fetch_card_data(name_guess)
             if not card:
-                return (line, "❌ Card not found or API error","danger", None)
+                return (line, "❌ Card not found or API error", "danger", None)
             status_text, status_type = check_legality(card["name"], card["sets"])
             return (card["name"], status_text, status_type, card["sets"])
 
@@ -266,23 +275,38 @@ with tab2:
 
         st.subheader("📋 Resultados:")
         for name, status_text, status_type, sets in results:
-            color = {"success":"green","warning":"orange","danger":"red"}[status_type]
-            st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
+            color = {
+                "success": "green",
+                "warning": "orange",
+                "danger": "red"
+            }[status_type]
+            st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>",
+                        unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+				
+# =========================
+# Tab 3 - Deckbuilder
+# =========================
+with tab3:
+    st.subheader("🧙‍♂️ Seu Deck Atual")
 
+    if not st.session_state.deck:
+        st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
+    else:
+        for card, qty in st.session_state.deck.items():
+            col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+            col1.markdown(f"**{card}**")
+            col2.markdown(f"**x{qty}**")
+            if col3.button("➕", key=f"plus_{card}"):
+                add_card(card, 1)
+            if col4.button("➖", key=f"minus_{card}"):
+                remove_card(card, 1)
 
+        st.markdown("---")
+        if st.button("🗑️ Limpar Deck"):
+            st.session_state.deck.clear()
+            st.success("Deck limpo!")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+    st.markdown("---")
+    st.caption("Dica: use a Aba 1 para pesquisar cartas e adicioná-las rapidamente ao deck.")
