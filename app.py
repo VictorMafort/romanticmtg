@@ -174,6 +174,44 @@ st.markdown("""
 .overlay-btn:hover {
   background: rgba(0,0,0,0.85);
 }
+.overlay-btns {
+    position: absolute;
+    top: 8%; /* levanta mais perto do topo da carta */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 5;
+}
+
+.overlay-btn {
+    display: flex;
+    flex-direction: column;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.btn-half {
+    width: 38px;
+    height: 26px;
+    background-color: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 0.8em;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-half:hover {
+    background-color: rgba(0,0,0,0.8);
+}
+
+.minus {
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -226,17 +264,23 @@ if thumbs:
             }[status_type]
             href = f"?pick={urllib.parse.quote(nome)}"
             html = f'''
-            <div class="sug-card">
-                <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
-                <div class="overlay-btns">
-                    <div class="overlay-btn">-1/+1</div>
-                    <div class="overlay-btn">-4/+4</div>
-                </div>
-                <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
-                    {status_text}
-                </div>
-            </div>
-            '''
+<div class="sug-card">
+    <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
+    <div class="overlay-btns">
+        <div class="overlay-btn">
+            <div class="btn-half minus">-1</div>
+            <div class="btn-half plus">+1</div>
+        </div>
+        <div class="overlay-btn">
+            <div class="btn-half minus">-4</div>
+            <div class="btn-half plus">+4</div>
+        </div>
+    </div>
+    <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
+        {status_text}
+    </div>
+</div>
+'''
             cols[idx].markdown(html, unsafe_allow_html=True)
 # =========================
 # Tab 2
@@ -267,6 +311,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
