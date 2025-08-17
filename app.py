@@ -225,19 +225,14 @@ with tab1:
                         "danger": "red"
                     }[status_type]
                     href = f"?pick={urllib.parse.quote(nome)}"
-html = f'''
-<div class="sug-card">
-    <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
-    <div class="overlay-btns">
-        <div class="overlay-btn">-1/+1</div>
-        <div class="overlay-btn">-4/+4</div>
-    </div>
-    <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
-        {status_text}
-    </div>
-</div>
-'''
-
+                    html = f'''
+                    <a class="sug-card" href="{href}">
+                        <img src="{img}" alt="{nome}" style="width:100%; height:auto;"/>
+                        <div style="text-align:center; color:{color}; font-weight:bold; font-size:1em; margin-top:4px;">
+                            {status_text}
+                        </div>
+                    </a>
+                    '''
                     cols[idx].markdown(html, unsafe_allow_html=True)
 
 # =========================
@@ -269,8 +264,6 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
-
-
 
 
 
