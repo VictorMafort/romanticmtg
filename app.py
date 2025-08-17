@@ -196,6 +196,65 @@ try:
 except Exception:
     pass
 	
+# =========================
+# Tab 1 - Single Card Checker (com adicionar e remover)
+# =========================
+with tab1:
+    query = st.text_input(
+        "Digite o começo do nome da carta:",
+        value=picked or ""
+    )
+    card_input = picked or None
+
+    thumbs = []
+
+    if query.strip():
+        sugestoes = buscar_sugestoes(query.strip())  # busca na API Scryfall
+
+        for nome in sugestoes[:21]:  # até 21 sugestões
+            data = fetch_card_data(nome)
+            if data and data.get("image"):
+                status_text, status_type = check_legality(
+                    data["name"], data.get("sets", [])
+                )
+                thumbs.append((nome, data["image"], status_text, status_type))
+
+    if thumbs:
+        st.caption("🔍 Sugestões:")
+        cols_per_row = 3
+        for i in range(0, len(thumbs), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+                color = {
+                    "success": "green",
+                    "warning": "orange",
+                    "danger": "red"
+                }[status_type]
+
+                with cols[idx]:
+                    # Imagem da carta
+                    st.image(img, use_container_width=True)
+
+                    # Status (legal, banida, não legal)
+                    st.markdown(
+                        f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
+                        unsafe_allow_html=True
+                    )
+
+                    # Botões para gerenciar o deck diretamente daqui
+                    colA, colB, colC, colD = st.columns(4)
+                    with colA:
+                        if st.button("-4", key=f"rem4_{i}_{idx}"):
+                            remove_card(nome, 4)
+                    with colB:
+                        if st.button("-1", key=f"rem1_{i}_{idx}"):
+                            remove_card(nome, 1)
+                    with colC:
+                        if st.button("+1", key=f"add1_{i}_{idx}"):
+                            add_card(nome, 1)
+                    with colD:
+                        if st.button("+4", key=f"add4_{i}_{idx}"):
+                            add_card(nome, 4)
 
 # =========================
 # Tab 2
@@ -257,4 +316,3 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e adicioná-las rapidamente ao deck.")
-
