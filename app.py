@@ -204,13 +204,10 @@ with tab1:
         "Digite o começo do nome da carta:",
         value=picked or ""
     )
-    card_input = picked or None
-
-    thumbs = []  # inicializa sempre
+    thumbs = []
 
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
-
         for nome in sugestoes[:21]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
@@ -225,37 +222,27 @@ with tab1:
         for i in range(0, len(thumbs), cols_per_row):
             cols = st.columns(cols_per_row)
             for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                color = {
-                    "success": "green",
-                    "warning": "orange",
-                    "danger": "red"
-                }[status_type]
-
+                color = {"success":"green","warning":"orange","danger":"red"}[status_type]
                 with cols[idx]:
                     st.image(img, use_container_width=True)
-
                     st.markdown(
                         f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
                         unsafe_allow_html=True
                     )
 
                     colA, colB, colC, colD = st.columns(4)
-                    with colA:
-                        if st.button("-4", key=f"sub4_{i}_{idx}"):
-                            remove_card(nome, 4)
-                            st.experimental_rerun()
-                    with colB:
-                        if st.button("-1", key=f"sub1_{i}_{idx}"):
-                            remove_card(nome, 1)
-                            st.experimental_rerun()
-                    with colC:
-                        if st.button("+1", key=f"add1_{i}_{idx}"):
-                            add_card(nome, 1)
-                            st.experimental_rerun()
-                    with colD:
-                        if st.button("+4", key=f"add4_{i}_{idx}"):
-                            add_card(nome, 4)
-                            st.experimental_rerun()
+                    if colA.button("-4", key=f"sub4_{i}_{idx}"):
+                        remove_card(nome, 4)
+                        st.experimental_rerun()
+                    if colB.button("-1", key=f"sub1_{i}_{idx}"):
+                        remove_card(nome, 1)
+                        st.experimental_rerun()
+                    if colC.button("+1", key=f"add1_{i}_{idx}"):
+                        add_card(nome, 1)
+                        st.experimental_rerun()
+                    if colD.button("+4", key=f"add4_{i}_{idx}"):
+                        add_card(nome, 4)
+                        st.experimental_rerun()
 # =========================
 # Tab 2
 # =========================
@@ -300,16 +287,14 @@ with tab3:
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        for card, qty in st.session_state.deck.items():
+        for card, qty in list(st.session_state.deck.items()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
-
-            # Invertido: subtrair antes de adicionar
-            if col3.button("➖", key=f"minus_{card}"):
+            if col3.button("➖", key=f"minus_{card}_{qty}"):
                 remove_card(card, 1)
                 st.experimental_rerun()
-            if col4.button("➕", key=f"plus_{card}"):
+            if col4.button("➕", key=f"plus_{card}_{qty}"):
                 add_card(card, 1)
                 st.experimental_rerun()
 
@@ -319,8 +304,6 @@ with tab3:
             st.success("Deck limpo!")
             st.experimental_rerun()
 
-    st.markdown("---")
-    st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
 
 
 
