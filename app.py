@@ -126,7 +126,8 @@ tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 
 # Tab 1
 with tab1:
-    card_input = st.text_input("Digite o nome da carta:")
+    # Campo de texto
+    card_input = st.text_input("Digite o nome da carta:", value=st.session_state.get("selected_card", ""))
 
     # Autocomplete com filtro anti-token
     if card_input and len(card_input) >= 3:
@@ -136,7 +137,8 @@ with tab1:
             st.caption("🔍 Sugestões:")
             for s in sugestoes[:5]:
                 if st.button(s, key=f"sug_{s}"):
-                    card_input = s
+                    st.session_state["selected_card"] = s
+                    st.experimental_rerun()
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
