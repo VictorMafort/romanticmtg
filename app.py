@@ -219,12 +219,10 @@ except Exception:
 with tab1:
     st.subheader("🔍 Buscar e Adicionar Cartas")
 
-    # Campo de busca
     search_query = st.text_input("Digite o nome da carta")
 
-    # Só busca se o usuário digitou algo
     if search_query:
-        # Filtra o catálogo (case-insensitive)
+        # Filtra catálogo (case-insensitive)
         results = [
             c for c in st.session_state.catalog
             if search_query.lower() in c.lower()
@@ -234,7 +232,21 @@ with tab1:
             for card in results:
                 col1, col2 = st.columns([5, 1])
                 col1.markdown(f"**{card}**")
-                # Botão de adicionar com key que inclui a quantidade atual
+
+                # Busca dados completos da carta
+                card_data = fetch_card_data(card)
+
+                # Exibe imagem se disponível
+                if card_data:
+                    if card_data.get("image"):
+                        col1.image(card_data["image"], use_column_width=True)
+                    elif card_data.get("card_faces"):
+                        # Pega a imagem da primeira face no caso de dupla face
+                        face_img = card_data["card_faces"][0].get("image_uris", {}).get("normal")
+                        if face_img:
+                            col1.image(face_img, use_column_width=True)
+
+                # Botão de adicionar (key inclui quantidade atual)
                 if col2.button(
                     "➕",
                     key=f"add_{card}_{st.session_state.deck.get(card, 0)}"
@@ -244,7 +256,7 @@ with tab1:
         else:
             st.warning("Nenhuma carta encontrada.")
     else:
-        st.info("Digite parte do nome de uma carta para buscar no catálogo.")
+        st.info("Digite parte do nome de
 # =========================
 # Tab 2
 # =========================
@@ -310,6 +322,7 @@ with tab3:
         if st.button("🗑️ Limpar Deck"):
             st.session_state.deck.clear()
             st.experimental_rerun()
+
 
 
 
