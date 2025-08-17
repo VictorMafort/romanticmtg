@@ -297,21 +297,18 @@ with tab2:
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
-    # Botão manual de atualização
+    # 🔄 Botão manual de atualização, com rerun seguro
     if st.button("🔄 Atualizar Deck", key="refresh_deck"):
+        # Interrompe aqui e recarrega a página
         st.experimental_rerun()
 
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        # Itere sobre uma cópia ordenada para ter UI estável durante mudanças
         for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-
             col1.markdown(f"**{card}**")
             col2.markdown(f"**x{qty}**")
-
-            # Invertido: subtrair vem antes de adicionar
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
             if col4.button("➕", key=f"plus_{card}"):
@@ -322,8 +319,6 @@ with tab3:
             st.session_state.deck.clear()
             st.success("Deck limpo!")
 
-    st.markdown("---")
-    st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
 
 
 
