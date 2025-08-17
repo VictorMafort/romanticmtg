@@ -297,6 +297,10 @@ with tab2:
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
+    # Botão manual de atualização
+    if st.button("🔄 Atualizar Deck", key="refresh_deck"):
+        st.experimental_rerun()
+
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
@@ -310,7 +314,6 @@ with tab3:
             # Invertido: subtrair vem antes de adicionar
             if col3.button("➖", key=f"minus_{card}"):
                 remove_card(card, 1)
-
             if col4.button("➕", key=f"plus_{card}"):
                 add_card(card, 1)
 
@@ -321,6 +324,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
