@@ -63,7 +63,7 @@ def fetch_card_data(card_name):
 
     all_sets = set()
 
-    # 🚀 Busca rápida: todos os sets permitidos em uma query só
+    # Busca rápida
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
     try:
@@ -83,7 +83,7 @@ def fetch_card_data(card_name):
     except requests.RequestException:
         pass
 
-    # 🐢 Busca lenta: prints completos, parando no primeiro permitido
+    # Busca lenta
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -128,12 +128,15 @@ tab1, tab2 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker"])
 with tab1:
     card_input = st.text_input("Digite o nome da carta:")
 
+    # Autocomplete com filtro anti-token
     if card_input and len(card_input) >= 3:
         sugestoes = buscar_sugestoes(card_input)
+        sugestoes = [s for s in sugestoes if "token" not in s.lower()]
         if sugestoes:
             st.caption("🔍 Sugestões:")
             for s in sugestoes[:5]:
-                st.markdown(f"- {s}")
+                if st.button(s, key=f"sug_{s}"):
+                    card_input = s
 
     if card_input:
         with st.spinner("Consultando Scryfall..."):
