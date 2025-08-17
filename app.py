@@ -259,6 +259,12 @@ with tab1:
 # =========================
 # Tab 2
 # =========================
+import re
+from concurrent.futures import ThreadPoolExecutor
+
+# =========================
+# Tab 2
+# =========================
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
@@ -267,8 +273,10 @@ with tab2:
         lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
 
         def process_line(line):
-            parts = line.split(" ", 1)
-            name_guess = parts[1] if parts[0].isdigit() and len(parts) > 1 else line
+            # Aceita formatos: "4x Tarmogoyf", "4 Tarmogoyf", "Tarmogoyf"
+            match = re.match(r"^(\d+)\s*x?\s*(.*)$", line.strip(), re.IGNORECASE)
+            name_guess = match.group(2) if match else line.strip()
+
             card = fetch_card_data(name_guess)
             if not card:
                 return (line, "❌ Card not found or API error", "danger", None)
@@ -286,8 +294,10 @@ with tab2:
                 "warning": "orange",
                 "danger": "red"
             }[status_type]
-            st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>",
-                        unsafe_allow_html=True)
+            st.markdown(
+                f"{name}: <span style='color:{color}'>{status_text}</span>",
+                unsafe_allow_html=True
+            )
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
 				
@@ -351,6 +361,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
