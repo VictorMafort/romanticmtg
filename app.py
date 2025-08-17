@@ -165,9 +165,7 @@ except Exception:
 # =========================
 # Tab 1
 # =========================
-# =========================
-# Tab 1 (versão estável, até 21 resultados)
-# =========================
+
 with tab1:
     query = st.text_input(
         "Digite o começo do nome da carta:",
@@ -236,6 +234,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
