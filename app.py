@@ -270,6 +270,47 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+# =========================
+# Deckbuilder (Tab 3)
+# =========================
+
+# Inicializa o deck no session_state
+if "deck" not in st.session_state:
+    st.session_state.deck = {}
+
+# Funções para manipular o deck
+def add_card(card_name, qty=1):
+    st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
+
+def remove_card(card_name, qty=1):
+    if card_name in st.session_state.deck:
+        st.session_state.deck[card_name] -= qty
+        if st.session_state.deck[card_name] <= 0:
+            del st.session_state.deck[card_name]
+
+# Captura comandos de adição/remoção via query params
+try:
+    params = st.query_params
+    if "add" in params:
+        add_card(params["add"][0], int(params.get("qty", [1])[0]))
+        st.query_params.clear()
+    elif "remove" in params:
+        remove_card(params["remove"][0], int(params.get("qty", [1])[0]))
+        st.query_params.clear()
+except:
+    pass
+
+# Adiciona a Tab 3
+tab3 = st.tabs(["🧙 Deckbuilder"])[0]
+
+with tab3:
+    st.header("🧙‍♂️ Seu Deck")
+    if st.session_state.deck:
+        for card, qty in st.session_state.deck.items():
+            st.write(f"**{qty}x** {card}")
+    else:
+        st.write("Seu deck está vazio. Adicione cartas na Tab 1.")
+
 
 
 
