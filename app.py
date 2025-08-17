@@ -166,13 +166,16 @@ except Exception:
 # Tab 1
 # =========================
 with tab1:
-    query = st.text_input("Digite o começo do nome da carta:", value=picked or "")
+    query = st.text_input(
+        "Digite sua busca (aceita sintaxe completa da Scryfall):",
+        value=picked or ""
+    )
     card_input = picked or None
 
     if query.strip():
-        sugestoes = buscar_sugestoes(query.strip())
+        # Agora a função de busca é chamada com a query direta
+        sugestoes = buscar_sugestoes(query.strip(), usar_syntax=True)
 
-        # Monta até 20 thumbs com legalidade
         thumbs = []
         for nome in sugestoes[:20]:
             data = fetch_card_data(nome)
@@ -181,12 +184,16 @@ with tab1:
                 thumbs.append((nome, data["image"], status_text, status_type))
 
         if thumbs:
-            st.caption("🔍 Sugestões:")
+            st.caption("🔍 Resultados da busca:")
             cols_per_row = 3
             for i in range(0, len(thumbs), cols_per_row):
                 cols = st.columns(cols_per_row)
                 for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                    color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
+                    color = {
+                        "success": "green",
+                        "warning": "orange",
+                        "danger": "red"
+                    }[status_type]
                     href = f"?pick={urllib.parse.quote(nome)}"
                     html = f'''
                     <a class="sug-card" href="{href}">
@@ -227,6 +234,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
