@@ -176,7 +176,7 @@ st.markdown("""
 }
 .overlay-btns {
     position: absolute;
-    top: 8%; /* levanta mais perto do topo da carta */
+    top: 65%; /* abaixa os botões para perto do meio inferior da carta */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -189,28 +189,28 @@ st.markdown("""
     flex-direction: column;
     border-radius: 4px;
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
 }
 
 .btn-half {
     width: 38px;
     height: 26px;
-    background-color: rgba(0,0,0,0.6);
-    color: white;
+    background-color: rgba(255,255,255,0.95); /* branco opaco */
+    color: black; /* texto preto */
     font-size: 0.8em;
     font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    border: 1px solid #ccc; /* contorno leve para destacar */
 }
 
 .btn-half:hover {
-    background-color: rgba(0,0,0,0.8);
+    background-color: rgba(230,230,230,1); /* cinza claro no hover */
 }
 
 .minus {
-    border-bottom: 1px solid rgba(255,255,255,0.2);
+    border-bottom: 1px solid #ccc;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -311,6 +311,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
