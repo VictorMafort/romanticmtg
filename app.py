@@ -128,9 +128,10 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 st.markdown("""
 <style>
 .sug-card {
+  position: relative;
   display: block;
-  background: transparent; /* fundo transparente */
-  border: 1px solid transparent; /* borda some até o hover */
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 8px;
   padding: 4px;
   text-decoration: none !important;
@@ -144,8 +145,34 @@ st.markdown("""
 .sug-card:hover {
   transform: translateY(-3px) scale(1.02);
   box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-  border-color: rgba(255, 215, 0, 0.6); /* dourado suave */
-  background-color: rgba(255, 255, 255, 0.04); /* leve véu no hover */
+  border-color: rgba(255, 215, 0, 0.6);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.overlay-btns {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.sug-card:hover .overlay-btns {
+  opacity: 1;
+}
+.overlay-btn {
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.9em;
+  cursor: pointer;
+  user-select: none;
+}
+.overlay-btn:hover {
+  background: rgba(0,0,0,0.85);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -237,6 +264,7 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
 
 
 
