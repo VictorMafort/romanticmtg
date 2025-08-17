@@ -297,9 +297,13 @@ with tab2:
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
 
-    # 🔄 Botão manual de atualização, com rerun seguro
-    if st.button("🔄 Atualizar Deck", key="refresh_deck"):
-        # Interrompe aqui e recarrega a página
+    # Botão: marca flag para atualizar
+    if st.button("🔄 Atualizar Deck", key="refresh_deck_btn"):
+        st.session_state.refresh_deck = True
+
+    # Se a flag foi marcada, faz o rerun e limpa
+    if st.session_state.refresh_deck:
+        st.session_state.refresh_deck = False
         st.experimental_rerun()
 
     if not st.session_state.deck:
@@ -318,6 +322,8 @@ with tab3:
         if st.button("🗑️ Limpar Deck", key="clear_deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
+
+
 
 
 
