@@ -172,20 +172,29 @@ with tab1:
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
 
-        # Monta thumbs (até 6 pra ficar bonito em grid)
-        thumbs = []
-        for nome in sugestoes[:6]:
-            data = fetch_card_data(nome)
-            if data and data.get("image"):
-                thumbs.append((nome, data["image"]))
+        # Monta thumbs com legalidade
+thumbs = []
+for nome in sugestoes[:6]:
+    data = fetch_card_data(nome)
+    if data and data.get("image"):
+        status_text, status_type = check_legality(data["name"], data["sets"])
+        thumbs.append((nome, data["image"], status_text, status_type))
 
-        if thumbs:
-            st.caption("🔍 Sugestões:")
-            cols = st.columns(len(thumbs))
-            for idx, (nome, img) in enumerate(thumbs):
-                href = f"?pick={urllib.parse.quote(nome)}"
-                html = f'<a class="sug-card" href="{href}"><img src="{img}" alt="{nome}"/></a>'
-                cols[idx].markdown(html, unsafe_allow_html=True)
+if thumbs:
+    st.caption("🔍 Sugestões:")
+    cols = st.columns(len(thumbs))
+    for idx, (nome, img, status_text, status_type) in enumerate(thumbs):
+        color = {"success":"green", "warning":"orange", "danger":"red"}[status_type]
+        href = f"?pick={urllib.parse.quote(nome)}"
+        html = f'''
+        <a class="sug-card" href="{href}">
+            <img src="{img}" alt="{nome}"/>
+            <div style="text-align:center; color:{color}; font-weight:bold; font-size:0.9em;">
+                {status_text}
+            </div>
+        </a>
+        '''
+        cols[idx].markdown(html, unsafe_allow_html=True)
 
     if not card_input:
         card_input = query.strip()
@@ -241,3 +250,4 @@ with tab2:
             st.markdown(f"{name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
             with st.expander(f"🗒️ Sets para {name} (debug)"):
                 st.write(sorted(sets) if sets else "Nenhum set encontrado")
+
