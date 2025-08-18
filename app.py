@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v3 responsivo
-- Botões ocupam 100% da coluna, sem min-width (evita sobreposição)
-- Fontes/paddings escalam com media queries (>=1100px, 820px, 640px, 480px)
-- Badge central também reduz tamanhos conforme a largura
-- Imagem usa use_container_width=True (sem aviso deprecado)
+Romantic Format Tools - v4 (overlay + flash em botões)
+- Badge de legalidade SOBRE a arte da carta (dentro da imagem), pulando uma faixa para não cobrir o nome
+- Controles abaixo da carta em 3 colunas: [-1 +1] | badge overlay já na imagem | [-4 +4]
+- Flash verde no botão quando adiciona; flash vermelho quando remove (aparece na próxima renderização)
+- Responsivo com media queries (1100/820/640/480)
 """
 import re
 import time
@@ -20,7 +20,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/0.8 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/0.9 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -103,7 +103,7 @@ def fetch_card_data(card_name):
             return {
                 "name": data.get("name", ""),
                 "sets": all_sets,
-                "image": data.get("image_uris", {}).get("small"),
+                "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
                 "type": data.get("type_line", ""),
                 "mana": data.get("mana_cost", ""),
                 "oracle": data.get("oracle_text", ""),
@@ -173,81 +173,73 @@ def remove_card(card_name, qty=1):
 # -------------------------
 # App
 # -------------------------
-st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
+st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
-# CSS responsivo
+# CSS (overlay + flash + responsivo)
 st.markdown(
     """
     <style>
-    /* Base: botões como pílulas, ocupando 100% da coluna */
-    div.stButton>button{
-        width: 100%;
-        min-width: 0;
-        padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(0,0,0,.10);
-        background: #fff;
-        color: #0f172a;
-        font-weight: 700;
-        font-size: 13px;
-        line-height: 1.2;
-        box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    }
-    div.stButton>button:hover{ background:#f1f5f9 }
+    /* Card com overlay */
+    .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    .rf-card img.rf-img{ display:block; width:100%; height:auto; }
 
-    /* Badge base */
-    .rf-badge{
-        display:flex; align-items:center; justify-content:center;
-        height: 32px; padding: 0 10px; border-radius: 999px;
-        font-weight: 600; font-size: 12px;
-        background: rgba(255,255,255,.92); color:#0f172a;
-        box-shadow: 0 1px 3px rgba(0,0,0,.12);
-        border: 1px solid rgba(0,0,0,.10);
-        white-space: nowrap;
+    /* Badge sobre a arte: colocada um pouco abaixo do topo pra não cobrir o nome */
+    .rf-badge-overlay{
+        position:absolute; left:50%; transform:translateX(-50%);
+        top: 40px; /* ~uma linha abaixo da barra do nome */
+        padding: 4px 10px; border-radius:999px; font-weight:700; font-size:12px;
+        background: rgba(255,255,255,.96); color:#0f172a;
+        box-shadow: 0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
+        pointer-events:none; /* não intercepta cliques */
+        white-space:nowrap;
     }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Imagem da carta */
-    [data-testid="stImage"] img{
-        display:block; width:100%; height:auto;
-        border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12);
+    /* Botões-pílula preenchendo a coluna */
+    div.stButton>button{
+        width:100%; min-width:0; padding:6px 10px; border-radius:999px;
+        border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
+        font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08);
+        transition: background .15s ease, box-shadow .15s ease;
     }
+    div.stButton>button:hover{ background:#f1f5f9 }
 
-    .rf-spacer{height:6px}
+    /* Flash nos botões: usamos um marcador antes do botão (.flash-add/rem) e estilizamos o irmão seguinte */
+    @keyframes rfFlashGreen{ 0%{background:#dcfce7; box-shadow:0 0 0 2px #86efac} 60%{background:#f0fdf4} 100%{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08)} }
+    @keyframes rfFlashRed{ 0%{background:#fee2e2; box-shadow:0 0 0 2px #fca5a5} 60%{background:#fef2f2} 100%{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08)} }
+    .flash-add + div button{ animation: rfFlashGreen .9s ease-out 1 }
+    .flash-rem + div button{ animation: rfFlashRed .9s ease-out 1 }
 
-    /* ====== Breakpoints ====== */
-    /* <= 1100px: levemente menor */
-    @media (max-width: 1100px){
-        div.stButton>button{ font-size:12px; padding:3px 9px }
-        .rf-badge{ height:30px; font-size:11.5px; padding:0 8px }
+    /* Espaços e responsivo */
+    .rf-spacer{height:8px}
+
+    @media (max-width:1100px){
+        .rf-badge-overlay{ top:36px; font-size:11.5px; padding:3px 9px }
+        div.stButton>button{ font-size:12px; padding:5px 10px }
     }
-    /* <= 820px: mais compacto */
-    @media (max-width: 820px){
-        div.stButton>button{ font-size:11.5px; padding:3px 8px }
-        .rf-badge{ height:28px; font-size:11px; padding:0 8px }
-        /* reduzir um pouco o espaçamento lateral padrão das columns */
-        [data-testid="column"]{ padding-left: .25rem; padding-right: .25rem }
+    @media (max-width:820px){
+        .rf-badge-overlay{ top:34px; font-size:11px; padding:3px 8px }
+        div.stButton>button{ font-size:11.5px; padding:4px 9px }
+        [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem }
     }
-    /* <= 640px: bem compacto */
-    @media (max-width: 640px){
-        div.stButton>button{ font-size:11px; padding:2px 7px }
-        .rf-badge{ height:26px; font-size:10.5px; padding:0 6px }
+    @media (max-width:640px){
+        .rf-badge-overlay{ top:30px; font-size:10.5px; padding:2px 7px }
+        div.stButton>button{ font-size:11px; padding:3px 8px }
     }
-    /* <= 480px: ultra compacto */
-    @media (max-width: 480px){
-        div.stButton>button{ font-size:10.5px; padding:2px 6px }
-        .rf-badge{ height:24px; font-size:10px; padding:0 6px }
+    @media (max-width:480px){
+        .rf-badge-overlay{ top:28px; font-size:10px; padding:2px 6px }
+        div.stButton>button{ font-size:10.5px; padding:3px 7px }
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("🧙 Romantic Format Tools")
+st.title("\U0001F9D9 Romantic Format Tools")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder"])
+tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder"])
 
 # -------------------------
 # Tab 1 - Single Card Checker
@@ -267,38 +259,59 @@ with tab1:
         return {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
 
     if thumbs:
-        st.caption("🔎 Sugestões:")
+        st.caption("\U0001F50E Sugestões:")
         cols_per_row = 3
         for i in range(0, len(thumbs), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
-                    st.image(img, use_container_width=True)
+                    # Card com overlay (HTML único para não quebrar o wrapper)
+                    st.markdown(
+                        f"""
+                        <div class='rf-card'>
+                          <img src='{img}' class='rf-img' alt='{nome}'/>
+                          <div class='rf-badge-overlay {_badge_class(status_type)}'>{status_text}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Espaço pequeno entre imagem e controles
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
-                    # Linha inferior: [-1 +1] | Badge | [-4 +4]
-                    left, mid, right = st.columns([2.2, 1.0, 2.2], gap="small")
+                    # Linha inferior: [-1 +1] | (overlay já na imagem) | [-4 +4]
+                    left, mid, right = st.columns([2.2, 0.6, 2.2], gap="small")
 
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
-                        if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 1)
-                        if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
-                            add_card(nome, 1)
+                        with c1:
+                            if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
+                                st.markdown('<div class="flash-rem"></div>', unsafe_allow_html=True)
+                            if st.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
+                                remove_card(nome, 1)
+                        with c2:
+                            if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
+                                st.markdown('<div class="flash-add"></div>', unsafe_allow_html=True)
+                            if st.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
+                                add_card(nome, 1)
 
                     with mid:
-                        st.markdown(
-                            f"<div class='rf-badge {_badge_class(status_type)}'>{status_text}</div>",
-                            unsafe_allow_html=True,
-                        )
+                        # Coluna "spacer" central apenas para equilibrar
+                        st.write("")
 
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
-                        if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 4)
-                        if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                            add_card(nome, 4)
+                        with c3:
+                            if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
+                                st.markdown('<div class="flash-rem"></div>', unsafe_allow_html=True)
+                            if st.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
+                                remove_card(nome, 4)
+                        with c4:
+                            if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
+                                st.markdown('<div class="flash-add"></div>', unsafe_allow_html=True)
+                            if st.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
+                                add_card(nome, 4)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
@@ -331,12 +344,12 @@ with tab2:
                 results = list(executor.map(process_line, lines))
             results = [r for r in results if r]
 
-        st.subheader("📋 Resultados:")
+        st.subheader("\U0001F4CB Resultados:")
         for name, qty, status_text, status_type, _ in results:
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
             st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
 
-        if st.button("📥 Adicionar lista ao Deckbuilder"):
+        if st.button("\U0001F4E5 Adicionar lista ao Deckbuilder"):
             for name, qty, status_text, status_type, _ in results:
                 if status_type != "danger":
                     st.session_state.deck[name] = st.session_state.deck.get(name, 0) + qty
@@ -346,7 +359,7 @@ with tab2:
 # Tab 3 - Deckbuilder
 # -------------------------
 with tab3:
-    st.subheader("🧙‍♂️ Seu Deck Atual")
+    st.subheader("\U0001F9D9\u200d♂️ Seu Deck Atual")
     total_cartas = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total_cartas}")
 
@@ -363,7 +376,7 @@ with tab3:
                 add_card(card, 1)
             st.markdown("---")
 
-    if st.button("🗑️ Limpar Deck", key="clear_deck"):
+    if st.button("\U0001F5D1️ Limpar Deck", key="clear_deck"):
         st.session_state.deck.clear()
         st.success("Deck limpo!")
         st.session_state.last_change = None
