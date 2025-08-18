@@ -352,7 +352,7 @@ if thumbs:
             with cols[j]:
                 pickq = quote(nome)
 
-               html = f"""
+                html = f"""
 <div class="rf-card">
   <img src="{img}" class="rf-img" alt="{nome}"/>
   <div class="rf-gradient"></div>
@@ -376,8 +376,6 @@ if thumbs:
 </div>
 """
 st.markdown(html, unsafe_allow_html=True)
-
-
 
 # =========================
 # Tab 2 – Decklist Checker
@@ -522,6 +520,7 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
