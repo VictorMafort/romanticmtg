@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v8 (controles mais próximos)
-- Mantém badge sobre a arte e contador no canto inferior direito
-- Remove a coluna do meio dos controles; agora são apenas 2 colunas: [-1/+1] | [-4/+4]
-- Gap mínimo entre os dois grupos
+Romantic Format Tools - v9 (botões DENTRO da carta no hover, sem abrir nova aba)
+- Badge de legalidade sobre a arte (offset para não cobrir o nome)
+- Contador (xN) no canto inferior direito da imagem, atualiza imediatamente
+- Botões [-1 +1] e [-4 +4] aparecem SOBRE a arte no HOVER (desktop) e ficam visíveis
+  sempre em dispositivos sem hover (mobile/tablet)
+- Evita abertura de links em nova aba: desativa pointer-events de <a> dentro do cardwrap
+- Usa wrappers "display: contents" para que os st.button funcionem dentro do overlay
 """
 import re
 import time
@@ -19,7 +22,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/1.2 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/1.3 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -175,6 +178,10 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", l
 st.markdown(
     """
     <style>
+    /* Wrapper geral que engloba imagem + overlay de botões */
+    .rf-cardwrap{ position:relative; }
+    .rf-cardwrap a{ pointer-events:none !important; } /* impede links dentro do card */
+
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
 
@@ -196,6 +203,24 @@ st.markdown(
         border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
     }
 
+    /* Overlay de controles (fica sobre a imagem) */
+    .rf-ctrls{ position:absolute; left:8px; right:8px; bottom:10px;
+        display:flex; justify-content:space-between; gap:8px;
+        opacity:0; transform:translateY(6px);
+        transition:opacity .15s ease, transform .15s ease; pointer-events:none; }
+
+    /* Mostrar no hover/focus */
+    .rf-cardwrap:hover .rf-ctrls, .rf-cardwrap:focus-within .rf-ctrls{ opacity:1; transform:none; pointer-events:auto }
+
+    /* Em dispositivos sem hover (mobile), sempre visível */
+    @media (hover: none){ .rf-ctrls{ opacity:1; transform:none; pointer-events:auto } }
+
+    /* Achatar wrappers do Streamlit para manter os botões "dentro" do overlay */
+    .rf-cardwrap [data-testid="stVerticalBlock"],
+    .rf-cardwrap [data-testid="stHorizontalBlock"],
+    .rf-cardwrap .stContainer{ display: contents; }
+
+    /* Botões pílula */
     div.stButton>button{
         width:100%; min-width:0; padding:6px 10px; border-radius:999px;
         border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
@@ -205,12 +230,9 @@ st.markdown(
 
     .rf-spacer{height:8px}
 
-    @media (max-width: 1100px){
-      [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
-    }
-    @media (max-width: 820px){
-      [data-testid="column"]{ padding-left:.3rem; padding-right:.3rem }
-    }
+    /* reduzir pequenos paddings em telas menores */
+    @media (max-width: 1100px){ [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem } }
+    @media (max-width: 820px){  [data-testid="column"]{ padding-left:.30rem; padding-right:.30rem } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -253,34 +275,37 @@ with tab1:
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
+                    # Abre o wrapper do card para que o overlay contenha os botões
+                    st.markdown("<div class='rf-cardwrap'>", unsafe_allow_html=True)
+
+                    # Placeholder do bloco inteiro do card (imagem + overlays)
                     card_ph = st.empty()
                     qty_before = st.session_state.deck.get(nome, 0)
                     card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
 
-                    st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
-
-                    # Apenas 2 colunas: [-1/+1] | [-4/+4]
-                    left, right = st.columns([1, 1], gap="small")
-
+                    # Overlay de botões (dentro do wrapper, posicionado absoluto)
+                    st.markdown("<div class='rf-ctrls'>", unsafe_allow_html=True)
+                    # dois grupos: [-1 +1] | [-4 +4]
+                    left_grp, right_grp = st.columns([1,1], gap="small")
                     clicked = False
-                    with left:
-                        c1, c2 = st.columns([1, 1], gap="small")
-                        if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 1)
-                            clicked = True
-                        if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
-                            add_card(nome, 1)
-                            clicked = True
+                    with left_grp:
+                        g1a, g1b = st.columns([1,1], gap="small")
+                        if g1a.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 1); clicked = True
+                        if g1b.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
+                            add_card(nome, 1); clicked = True
+                    with right_grp:
+                        g2a, g2b = st.columns([1,1], gap="small")
+                        if g2a.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 4); clicked = True
+                        if g2b.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
+                            add_card(nome, 4); clicked = True
+                    st.markdown("</div>", unsafe_allow_html=True)  # fecha rf-ctrls
 
-                    with right:
-                        c3, c4 = st.columns([1, 1], gap="small")
-                        if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 4)
-                            clicked = True
-                        if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                            add_card(nome, 4)
-                            clicked = True
+                    # Fecha o wrapper do card
+                    st.markdown("</div>", unsafe_allow_html=True)
 
+                    # Se houve clique, re-renderiza a imagem/overlays com a NOVA quantidade
                     if clicked:
                         qty_after = st.session_state.deck.get(nome, 0)
                         card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
