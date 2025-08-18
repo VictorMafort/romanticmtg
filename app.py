@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v7 (overlay + contador com atualização imediata)
-- Badge de legalidade sobre a arte (offset para não cobrir o nome)
-- Contador de quantidade (xN) no canto inferior direito da imagem
-- **Sem ripple/flash**; contador atualiza imediatamente após clicar nos botões
+Romantic Format Tools - v8 (controles mais próximos)
+- Mantém badge sobre a arte e contador no canto inferior direito
+- Remove a coluna do meio dos controles; agora são apenas 2 colunas: [-1/+1] | [-4/+4]
+- Gap mínimo entre os dois grupos
 """
 import re
 import time
@@ -19,7 +19,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/1.1 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/1.2 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -89,7 +89,6 @@ def fetch_card_data(card_name):
 
     all_sets = set()
 
-    # Busca rápida limitada aos sets permitidos
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     quick_url = f"https://api.scryfall.com/cards/search?q=!%22{safe_name}%22+e:({set_query})"
     try:
@@ -110,7 +109,6 @@ def fetch_card_data(card_name):
     except Exception:
         pass
 
-    # Busca completa por prints (early stop se achar set permitido)
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -174,14 +172,12 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
-# CSS (overlay + contador)
 st.markdown(
     """
     <style>
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
 
-    /* Badge de legalidade sobre a arte */
     .rf-badge-overlay{
         position:absolute; left:50%; transform:translateX(-50%);
         top: 40px; padding: 4px 10px; border-radius:999px;
@@ -193,7 +189,6 @@ st.markdown(
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Contador no canto inferior direito da arte */
     .rf-qty-badge{
         position:absolute; right:8px; bottom:8px;
         background: rgba(0,0,0,.65); color:#fff; padding:2px 8px;
@@ -201,7 +196,6 @@ st.markdown(
         border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
     }
 
-    /* Botões-pílula */
     div.stButton>button{
         width:100%; min-width:0; padding:6px 10px; border-radius:999px;
         border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
@@ -211,27 +205,11 @@ st.markdown(
 
     .rf-spacer{height:8px}
 
-    /* Responsivo */
-    @media (max-width:1100px){
-        .rf-badge-overlay{ top:36px; font-size:11.5px; padding:3px 9px }
-        .rf-qty-badge{ font-size:11.5px; padding:2px 7px }
-        div.stButton>button{ font-size:12px; padding:5px 10px }
+    @media (max-width: 1100px){
+      [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     }
-    @media (max-width:820px){
-        .rf-badge-overlay{ top:34px; font-size:11px; padding:3px 8px }
-        .rf-qty-badge{ font-size:11px; padding:2px 7px }
-        div.stButton>button{ font-size:11.5px; padding:4px 9px }
-        [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem }
-    }
-    @media (max-width:640px){
-        .rf-badge-overlay{ top:30px; font-size:10.5px; padding:2px 7px }
-        .rf-qty-badge{ font-size:10.5px; padding:2px 6px }
-        div.stButton>button{ font-size:11px; padding:3px 8px }
-    }
-    @media (max-width:480px){
-        .rf-badge-overlay{ top:28px; font-size:10px; padding:2px 6px }
-        .rf-qty-badge{ font-size:10px; padding:2px 6px }
-        div.stButton>button{ font-size:10.5px; padding:3px 7px }
+    @media (max-width: 820px){
+      [data-testid="column"]{ padding-left:.3rem; padding-right:.3rem }
     }
     </style>
     """,
@@ -242,7 +220,6 @@ st.title("\U0001F9D9 Romantic Format Tools")
 
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder"])
 
-# Helper para renderizar o card com overlays
 
 def render_card_html(img_url: str, nome: str, status_text: str, status_type: str, qty: int) -> str:
     cls = {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
@@ -276,18 +253,14 @@ with tab1:
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
-                    # Placeholder do card (vamos preencher DEPOIS de processar os botões para refletir a quantidade atual)
                     card_ph = st.empty()
-
-                    # Quantidade antes de qualquer clique
                     qty_before = st.session_state.deck.get(nome, 0)
-                    # Render inicial (para a primeira pintura da página)
                     card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
-                    # Controles
-                    left, mid, right = st.columns([2.2, 0.6, 2.2], gap="small")
+                    # Apenas 2 colunas: [-1/+1] | [-4/+4]
+                    left, right = st.columns([1, 1], gap="small")
 
                     clicked = False
                     with left:
@@ -299,9 +272,6 @@ with tab1:
                             add_card(nome, 1)
                             clicked = True
 
-                    with mid:
-                        st.write("")
-
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
                         if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
@@ -311,7 +281,6 @@ with tab1:
                             add_card(nome, 4)
                             clicked = True
 
-                    # Se houve clique, re-renderiza o card com a NOVA quantidade nesta mesma execução
                     if clicked:
                         qty_after = st.session_state.deck.get(nome, 0)
                         card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
