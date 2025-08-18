@@ -1,12 +1,12 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.4 (Ajustes pedidos)
-- Aba 1: **removido** o slider de "cartas por linha" (fixo em 3 por linha)
-- Aba 3: mantém o mesmo tamanho máximo de carta da Aba 1 (controlado por --rf-card-max)
-- Botões: corrigido rótulo com símbolo de "+" onde faltava/estava escapado demais
-- Fix: barra de +/- da Aba 3 com melhor contraste/visibilidade e z-index
-- Fix: cálculo dinâmico de --rf-card-max para equivaler ao tamanho de 3 por linha
+Romantic Format Tools - v13.5 (Centered buttons)
+- Aba 1: grupo de botões (−4 −1 +1 +4) centralizado por carta
+- Aba 2: botão "Adicionar lista ao Deckbuilder" centralizado
+- Aba 3: botões (➖ ➕) centralizados sobre a arte; mantém limite de tamanho da carta equivalente a 3 por linha
+- Rodapé: botão de download centralizado
+- Mantidos os fixes de contraste, z-index e cálculo de --rf-card-max
 """
 import re
 import time
@@ -15,6 +15,7 @@ from collections import deque, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import requests
 import streamlit as st
+
 # --------------------
 # Sessão HTTP + throttle
 # --------------------
@@ -234,19 +235,22 @@ with tab1:
                     badge_cls = "rf-success" if status_type=="success" else ("rf-danger" if status_type=="danger" else "rf-warning")
                     badge = f"<div class='rf-name-badge {badge_cls}'>{status_text}</div>"
                     ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
-                    bcols = st.columns([1,1,1,1], gap="small")
+
+                    # Centraliza o grupo de botões usando colunas-espaçadoras
+                    bcols = st.columns([1, 1, 1, 1, 1, 1], gap="small")
                     clicked=False
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-                    if bcols[0].button("−4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
-                    if bcols[1].button("−1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
-                    if bcols[2].button("+1", key=f"{base_key}_p1"): add_card(name,1); clicked=True
-                    if bcols[3].button("+4", key=f"{base_key}_p4"): add_card(name,4); clicked=True
+                    if bcols[1].button("−4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
+                    if bcols[2].button("−1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
+                    if bcols[3].button("+1", key=f"{base_key}_p1"): add_card(name,1); clicked=True
+                    if bcols[4].button("+4", key=f"{base_key}_p4"): add_card(name,4); clicked=True
+
                     if clicked:
                         qty2 = st.session_state.deck.get(name,0)
                         ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
 
 # --------------------
-# Tab 2 (igual)
+# Tab 2 — Decklist Checker
 # --------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
@@ -273,11 +277,15 @@ with tab2:
         for name, qty, status_text, status_type, _ in results:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
-        if st.button("📥 Adicionar lista ao Deckbuilder"):
-            for name, qty, status_text, status_type, _ in results:
-                if status_type != "danger":
-                    st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
-            st.success("Decklist adicionada ao Deckbuilder!")
+
+        # Botão centralizado
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c2:
+            if st.button("📥 Adicionar lista ao Deckbuilder"):
+                for name, qty, status_text, status_type, _ in results:
+                    if status_type != "danger":
+                        st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
+                st.success("Decklist adicionada ao Deckbuilder!")
 
 # --------------------
 # Tab 3 — Artes por tipo + in-image +/- + contador instantâneo
@@ -340,20 +348,26 @@ with tab3:
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
                         card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
 
-                        # Barra +/-: marcador visual para largura/posição; botões vêm depois (como exige o Streamlit)
+                        # Barra +/-: marcador visual para largura/posição
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
-                        minus_c, plus_c = st.columns([1, 1], gap="small")
-                        clicked = False
-                        if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
-                            remove_card(name, 1); clicked=True
-                        if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
-                            add_card(name, 1); clicked=True
+
+                        # Centraliza os dois botões no miolo
+                        left_sp, mid, right_sp = st.columns([1, 2, 1])
+                        with mid:
+                            minus_c, plus_c = st.columns([1, 1], gap="small")
+                            clicked = False
+                            if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
+                                remove_card(name, 1); clicked=True
+                            if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
+                                add_card(name, 1); clicked=True
 
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
                             card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
                 st.markdown("---")
 
-        # Export
+        # Export (centralizado)
         lines = [f"{q}x {n}" for n, q in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
-        st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
+        d1, d2, d3 = st.columns([1, 1, 1])
+        with d2:
+            st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
