@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - sem hover e sem flash
-- Botões dentro do cartão (usando apenas Streamlit columns), em pílulas abaixo da imagem
-- Badge de legalidade no CENTRO entre as pílulas (-1/+1) e (-4/+4)
-- Nada abre em outra aba (não há <a> nos cards)
+Romantic Format Tools - v2 (ajuste de tamanhos e fontes)
+- Botões não se sobrepõem: largura 100% dentro das colunas e min-width zerado
+- Fontes menores e pílulas mais compactas
+- Badge central mais enxuta
+- st.image usa use_container_width=True (remove aviso deprecado)
 """
 import re
 import time
@@ -174,45 +175,48 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS (sem hover; badge central; sem wrappers HTML de card/controls)
+# CSS (tamanhos & fontes ajustados)
 st.markdown(
     """
     <style>
-    /* Botões em formato de pílula */
+    /* Compacta os botões e evita sobreposição: preenche a coluna e sem min-width */
     div.stButton>button{
-        min-width:56px;
-        padding:4px 12px;
-        border-radius:999px;
-        border:1px solid rgba(0,0,0,.08);
-        background:#fff;
-        color:#0f172a;
-        font-weight:800;
-        box-shadow:0 1px 3px rgba(0,0,0,.08);
+        width: 100%;
+        min-width: 0;              /* <- evita overflow dentro de colunas estreitas */
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(0,0,0,.10);
+        background: #fff;
+        color: #0f172a;
+        font-weight: 700;          /* um pouco menos bold para não “estufar” */
+        font-size: 13px;
+        line-height: 1.2;
+        box-shadow: 0 1px 3px rgba(0,0,0,.08);
     }
     div.stButton>button:hover{ background:#f1f5f9 }
 
-    /* Badge central */
+    /* Badge mais enxuta */
     .rf-badge{
         display:flex; align-items:center; justify-content:center;
-        height:36px; padding:0 12px; border-radius:999px;
-        font-weight:700; font-size:.82rem;
-        background:rgba(255,255,255,.92); color:#0f172a;
-        box-shadow:0 1px 4px rgba(0,0,0,.15);
-        border:1px solid rgba(0,0,0,.08);
-        margin: 4px 0;
+        height: 32px; padding: 0 10px; border-radius: 999px;
+        font-weight: 600; font-size: 12px;
+        background: rgba(255,255,255,.92); color:#0f172a;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+        border: 1px solid rgba(0,0,0,.10);
+        white-space: nowrap;
     }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Imagem com cantos arredondados e sombra (sem wrapper extra) */
+    /* Imagem sem aviso deprecado (estilo visual) */
     [data-testid="stImage"] img{
         display:block; width:100%; height:auto;
         border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12);
     }
 
-    /* Aba 3: botões menores */
-    .row-qty div.stButton>button{ padding:2px 8px; border-radius:8px }
+    /* Pequenos espaçadores verticais entre linhas de controle */
+    .rf-spacer{height:6px}
     </style>
     """,
     unsafe_allow_html=True,
@@ -248,10 +252,14 @@ with tab1:
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
                     # Imagem da carta
-                    st.image(img, use_column_width=True)
+                    st.image(img, use_container_width=True)
+
+                    # Espaço pequeno entre imagem e controles
+                    st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
                     # Linha inferior: [-1 +1] | Badge | [-4 +4]
-                    left, mid, right = st.columns([1, 1, 1], gap="small")
+                    # Damos mais espaço p/ as colunas de botões
+                    left, mid, right = st.columns([2.2, 1.0, 2.2], gap="small")
 
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
@@ -272,6 +280,9 @@ with tab1:
                             remove_card(nome, 4)
                         if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
                             add_card(nome, 4)
+
+                    # Espaço final para não encostar no próximo card
+                    st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
 # Tab 2 - Decklist Checker
