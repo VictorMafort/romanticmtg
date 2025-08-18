@@ -1,11 +1,10 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.10
-- Aba 4:
-  * Tabela de subtipos (criaturas) **sem coluna de índice**
-  * **Gráficos circulares (donut)** para: distribuição de cores e fontes de mana (todas / só terrenos)
-- Aba 1: **corrigido suporte a cartas dupla-face** (DFC) como *Delver of Secrets* — busca imagem na primeira face quando `image_uris` não existe no nível raiz
+Romantic Format Tools - v13.10a
+- Corrige erro de dependência: remove Plotly e usa **Altair** para gráficos (donut)
+- Aba 4: tabela de subtipos (criaturas) **sem índice** + donuts de distribuição de cores e fontes de mana
+- Aba 1: suporte a **cartas dupla-face (DFC)** — usa `card_faces[0].image_uris` quando necessário
 - Mantém: Aba 3 (qty>4 em vermelho, tamanho fixo, remover ao zerar), botão para limpar cache, query Scryfall codificada
 """
 import re
@@ -17,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import altair as alt
 
 # --------------------
 # Sessão HTTP + throttle
@@ -405,7 +404,7 @@ with tab3:
             st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
 
 # --------------------
-# Tab 4 — Análise
+# Tab 4 — Análise (Subtipos + Donuts com Altair)
 # --------------------
 with tab4:
     st.subheader("📊 Análise do Deck")
@@ -434,7 +433,7 @@ with tab4:
                 meta = list(ex.map(load_meta, names))
         df = pd.DataFrame(meta)
 
-        # ====== 4.1 Subtipos DE CRIATURAS (tabela, sem índice) ======
+        # ====== Subtipos de Criaturas (sem índice) ======
         st.markdown("### 🧩 Subtipos de **Criaturas**")
         def extract_subtypes(tline:str):
             if not tline or 'Creature' not in tline:
@@ -466,71 +465,56 @@ with tab4:
         else:
             st.info("Nenhuma criatura com subtipo identificada no deck.")
 
-        # ====== Paleta de cores (padrão MTG) para os gráficos ======
-        color_map = {
-            'W':'#d6d3c2',  # "white" mais escuro p/ texto branco legível
-            'U':'#2b6cb0',  # blue
-            'B':'#1f2937',  # black (gray-800)
-            'R':'#c53030',  # red
-            'G':'#2f855a',  # green
-            'C':'#6b7280',  # colorless
-        }
+        # ====== Função utilitária p/ donuts Altair ======
+        def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str, color_map: dict, title: str = ""):
+            # ordena por ordem fixa de cores quando possível
+            domain = [c for c in ['W','U','B','R','G','C'] if c in df_vals[label_col].tolist()]
+            rng = [color_map[c] for c in domain]
+            base = alt.Chart(df_vals).encode(
+                theta=alt.Theta(field=value_col, type='quantitative'),
+                color=alt.Color(field=label_col, type='nominal', scale=alt.Scale(domain=domain, range=rng), legend=alt.Legend(title=None))
+            )
+            arc = base.mark_arc(innerRadius=70, outerRadius=120)
+            # texto dentro da fatia (valor)
+            text_color = alt.condition(
+                alt.datum[label_col].isin(['W','C']),
+                alt.value('black'),
+                alt.value('white')
+            )
+            txt = base.mark_text(radius=95, size=12).encode(text=value_col+':Q', color=text_color)
+            chart = (arc + txt).properties(title=title, height=300)
+            return chart
 
-        # ====== 4.2 Distribuição de cores (donut) ======
+        # ====== Distribuição de cores ======
         st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
-        def has_color(ci, c):
-            try:
-                return c in (ci or [])
-            except Exception:
-                return False
         letters = ['W','U','B','R','G','C']
-        dist_rows = []
-        total_copias = int(df['qty'].sum()) if not df.empty else 0
+        color_map = {'W':'#d6d3c2','U':'#2b6cb0','B':'#1f2937','R':'#c53030','G':'#2f855a','C':'#6b7280'}
+        rows_dist = []
         for c in letters:
             if c == 'C':
                 qtd = int(df[df['color_identity'].apply(lambda x: not (x or []))]['qty'].sum())
             else:
-                qtd = int(df[df['color_identity'].apply(lambda x: has_color(x, c))]['qty'].sum())
-            dist_rows.append({'Cor': c, 'Cópias': qtd})
-        dist_df = pd.DataFrame(dist_rows)
-        fig1 = px.pie(dist_df, values='Cópias', names='Cor', color='Cor',
-                      color_discrete_map=color_map, hole=0.55)
-        fig1.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
-        fig1.update_layout(showlegend=True, legend_title_text='Cor')
-        st.plotly_chart(fig1, use_container_width=True)
+                qtd = int(df[df['color_identity'].apply(lambda x: isinstance(x,list) and (c in x))]['qty'].sum())
+            rows_dist.append({'Cor': c, 'Cópias': qtd})
+        dist_df = pd.DataFrame(rows_dist)
+        st.altair_chart(donut_altair(dist_df, 'Cor', 'Cópias', color_map), use_container_width=True)
         st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; a soma pode exceder 100%.")
 
-        # ====== 4.3 Fontes de mana (donuts lado a lado) ======
+        # ====== Fontes de mana ======
         st.markdown("### ⛲ Fontes de mana por cor")
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, (list, tuple)) and len(v) > 0)
         sources_df = df[is_source].copy()
         land_src_df = df[is_source & df['type_line'].apply(lambda t: isinstance(t, str) and ('Land' in t))].copy()
-
-        def count_sources(dframe, letter):
-            def produces(lst):
-                try:
-                    return letter in (lst or [])
-                except Exception:
-                    return False
-            return int(dframe[dframe['produced_mana'].apply(produces)]['qty'].sum())
-
-        src_rows_all, src_rows_land = [], []
+        def count_src(dframe, letter):
+            return int(dframe[dframe['produced_mana'].apply(lambda lst: isinstance(lst,list) and (letter in lst))]['qty'].sum())
+        rows_all, rows_land = [], []
         for c in letters:
-            src_rows_all.append({'Cor': c, 'Fontes': count_sources(sources_df, c)})
-            src_rows_land.append({'Cor': c, 'Fontes': count_sources(land_src_df, c)})
-        pie_all = pd.DataFrame(src_rows_all)
-        pie_land = pd.DataFrame(src_rows_land)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
+            rows_all.append({'Cor': c, 'Fontes': count_src(sources_df, c)})
+            rows_land.append({'Cor': c, 'Fontes': count_src(land_src_df, c)})
+        c1, c2 = st.columns(2)
+        with c1:
             st.caption("Todas as permanentes")
-            fig2 = px.pie(pie_all, values='Fontes', names='Cor', color='Cor', color_discrete_map=color_map, hole=0.55)
-            fig2.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
-            fig2.update_layout(showlegend=False)
-            st.plotly_chart(fig2, use_container_width=True)
-        with col_b:
+            st.altair_chart(donut_altair(pd.DataFrame(rows_all), 'Cor', 'Fontes', color_map), use_container_width=True)
+        with c2:
             st.caption("Somente terrenos")
-            fig3 = px.pie(pie_land, values='Fontes', names='Cor', color='Cor', color_discrete_map=color_map, hole=0.55)
-            fig3.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
-            fig3.update_layout(showlegend=False)
-            st.plotly_chart(fig3, use_container_width=True)
+            st.altair_chart(donut_altair(pd.DataFrame(rows_land), 'Cor', 'Fontes', color_map), use_container_width=True)
