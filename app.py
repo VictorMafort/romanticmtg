@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v2 (ajuste de tamanhos e fontes)
-- Botões não se sobrepõem: largura 100% dentro das colunas e min-width zerado
-- Fontes menores e pílulas mais compactas
-- Badge central mais enxuta
-- st.image usa use_container_width=True (remove aviso deprecado)
+Romantic Format Tools - v3 responsivo
+- Botões ocupam 100% da coluna, sem min-width (evita sobreposição)
+- Fontes/paddings escalam com media queries (>=1100px, 820px, 640px, 480px)
+- Badge central também reduz tamanhos conforme a largura
+- Imagem usa use_container_width=True (sem aviso deprecado)
 """
 import re
 import time
@@ -175,27 +175,27 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS (tamanhos & fontes ajustados)
+# CSS responsivo
 st.markdown(
     """
     <style>
-    /* Compacta os botões e evita sobreposição: preenche a coluna e sem min-width */
+    /* Base: botões como pílulas, ocupando 100% da coluna */
     div.stButton>button{
         width: 100%;
-        min-width: 0;              /* <- evita overflow dentro de colunas estreitas */
+        min-width: 0;
         padding: 4px 10px;
         border-radius: 999px;
         border: 1px solid rgba(0,0,0,.10);
         background: #fff;
         color: #0f172a;
-        font-weight: 700;          /* um pouco menos bold para não “estufar” */
+        font-weight: 700;
         font-size: 13px;
         line-height: 1.2;
         box-shadow: 0 1px 3px rgba(0,0,0,.08);
     }
     div.stButton>button:hover{ background:#f1f5f9 }
 
-    /* Badge mais enxuta */
+    /* Badge base */
     .rf-badge{
         display:flex; align-items:center; justify-content:center;
         height: 32px; padding: 0 10px; border-radius: 999px;
@@ -209,14 +209,37 @@ st.markdown(
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Imagem sem aviso deprecado (estilo visual) */
+    /* Imagem da carta */
     [data-testid="stImage"] img{
         display:block; width:100%; height:auto;
         border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12);
     }
 
-    /* Pequenos espaçadores verticais entre linhas de controle */
     .rf-spacer{height:6px}
+
+    /* ====== Breakpoints ====== */
+    /* <= 1100px: levemente menor */
+    @media (max-width: 1100px){
+        div.stButton>button{ font-size:12px; padding:3px 9px }
+        .rf-badge{ height:30px; font-size:11.5px; padding:0 8px }
+    }
+    /* <= 820px: mais compacto */
+    @media (max-width: 820px){
+        div.stButton>button{ font-size:11.5px; padding:3px 8px }
+        .rf-badge{ height:28px; font-size:11px; padding:0 8px }
+        /* reduzir um pouco o espaçamento lateral padrão das columns */
+        [data-testid="column"]{ padding-left: .25rem; padding-right: .25rem }
+    }
+    /* <= 640px: bem compacto */
+    @media (max-width: 640px){
+        div.stButton>button{ font-size:11px; padding:2px 7px }
+        .rf-badge{ height:26px; font-size:10.5px; padding:0 6px }
+    }
+    /* <= 480px: ultra compacto */
+    @media (max-width: 480px){
+        div.stButton>button{ font-size:10.5px; padding:2px 6px }
+        .rf-badge{ height:24px; font-size:10px; padding:0 6px }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -251,14 +274,10 @@ with tab1:
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
-                    # Imagem da carta
                     st.image(img, use_container_width=True)
-
-                    # Espaço pequeno entre imagem e controles
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
                     # Linha inferior: [-1 +1] | Badge | [-4 +4]
-                    # Damos mais espaço p/ as colunas de botões
                     left, mid, right = st.columns([2.2, 1.0, 2.2], gap="small")
 
                     with left:
@@ -281,7 +300,6 @@ with tab1:
                         if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
                             add_card(nome, 4)
 
-                    # Espaço final para não encostar no próximo card
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
