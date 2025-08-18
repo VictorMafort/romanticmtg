@@ -281,34 +281,46 @@ with tab1:
                     if colD.button("+4", key=f"add4_{i}_{idx}_{nome}"):
                         add_card(nome, 4)
 # =========================
-# Tab 2
+# Tab 2 Deckchecker
+# =========================
+# =========================
+# Tab 2 – Decklist Checker
 # =========================
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=300)
 
+    def process_line(line: str):
+        # remove comentários no fim da linha e espaços
+        line = re.sub(r'#.*$', '', line).strip()
+        if not line:
+            return None  # ignora linhas vazias após limpeza
+
+        # Formatos aceitos: "SB: 3x Nome", "4x Nome", "4 Nome", "Nome"
+        m = re.match(r'^(SB:)?\s*(\d+)?\s*x?\s*(.+)$', line, re.IGNORECASE)
+        if not m:
+            return (line, 1, "❌ Card not found or API error", "danger", None)
+
+        qty = int(m.group(2) or 1)
+        name_guess = m.group(3).strip()
+
+        card = fetch_card_data(name_guess)
+        if not card:
+            return (line, qty, "❌ Card not found or API error", "danger", None)
+
+        status_text, status_type = check_legality(card["name"], card["sets"])
+        return (card["name"], qty, status_text, status_type, card["sets"])
+
     if deck_input.strip():
-        lines = [l.strip() for l in deck_input.splitlines() if l.strip()]
-
-        def process_line(line):
-            # Aceita formatos: "4x Tarmogoyf", "4 Tarmogoyf", "Tarmogoyf"
-            match = re.match(r"^(\d+)\s*x?\s*(.*)$", line.strip(), re.IGNORECASE)
-            if match:
-                qty = int(match.group(1))
-                name_guess = match.group(2)
-            else:
-                qty = 1
-                name_guess = line.strip()
-
-            card = fetch_card_data(name_guess)
-            if not card:
-                return (line, qty, "❌ Card not found or API error", "danger", None)
-            status_text, status_type = check_legality(card["name"], card["sets"])
-            return (card["name"], qty, status_text, status_type, card["sets"])
+        lines = [l for l in deck_input.splitlines()]
 
         with st.spinner("Checando decklist..."):
+            from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
+
+        # remove linhas None (comentários/vazias)
+        results = [r for r in results if r]
 
         st.subheader("📋 Resultados:")
         for name, qty, status_text, status_type, _ in results:
@@ -318,7 +330,8 @@ with tab2:
                 "danger": "red"
             }[status_type]
             st.markdown(
-                f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>",
+                f"{qty}x {name}: "
+                f"<span style='color:{color}'>{status_text}</span>",
                 unsafe_allow_html=True
             )
 
@@ -330,8 +343,12 @@ with tab2:
             st.success("Decklist adicionada ao Deckbuilder!")
 
 
+
 # =========================
 # Tab 3 - Deckbuilder
+# =========================
+# =========================
+# Tab 3 – Deckbuilder
 # =========================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
@@ -352,15 +369,21 @@ with tab3:
         for card, qty in sorted(list(st.session_state.deck.items()), key=lambda x: x[0].lower()):
             col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
 
-            # Nome normal
+            # Nome
             col1.markdown(f"**{card}**")
 
             # Quantidade com highlight se foi a última alterada
             if st.session_state.last_change == card:
                 if st.session_state.last_action == "add":
-                    col2.markdown(f"<span style='color:green;font-weight:bold;'>x{qty}</span>", unsafe_allow_html=True)
+                    col2.markdown(
+                        f"<span style='color:green;font-weight:bold;'>x{qty}</span>",
+                        unsafe_allow_html=True
+                    )
                 elif st.session_state.last_action == "remove":
-                    col2.markdown(f"<span style='color:red;font-weight:bold;'>x{qty}</span>", unsafe_allow_html=True)
+                    col2.markdown(
+                        f"<span style='color:red;font-weight:bold;'>x{qty}</span>",
+                        unsafe_allow_html=True
+                    )
                 else:
                     col2.markdown(f"**x{qty}**")
             else:
@@ -379,14 +402,32 @@ with tab3:
                 st.session_state.last_action = "add"
 
         st.markdown("---")
+
+        # Botão para limpar deck
         if st.button("🗑️ Limpar Deck", key="clear_deck"):
             st.session_state.deck.clear()
             st.success("Deck limpo!")
             st.session_state.last_change = None
             st.session_state.last_action = None
 
-    st.markdown("---")
-    st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+        st.markdown("---")
+
+        # --- Exportar deck como .txt ---
+        export_lines = [
+            f"{qty}x {name}"
+            for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())
+        ]
+        export_text = "\n".join(export_lines)
+        st.download_button(
+            "⬇️ Baixar deck (.txt)",
+            data=export_text,
+            file_name="deck.txt",
+            mime="text/plain"
+        )
+
+        st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
+
 
 
 
