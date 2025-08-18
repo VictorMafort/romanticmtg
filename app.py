@@ -365,16 +365,12 @@ if thumbs:
                   <!-- Rodapé: duas pílulas (-1/+1) e (-4/+4), aparecem no hover -->
                   <div class="rf-bottom">
                     <div class="rf-pill">
-                      if st.button("-1", key="-1_pickq"):
-    remove_card("pickq", -1)
-                      if st.button("+1", key="+1_pickq"):
-    add_card("pickq", +1)
+                      <a class="rf-btn" href="?pick={pickq}&delta=-1">-1</a>
+                      <a class="rf-btn" href="?pick={pickq}&delta=+1">+1</a>
                     </div>
                     <div class="rf-pill">
-                      if st.button("-4", key="-4_pickq"):
-    remove_card("pickq", -4)
-                      if st.button("+4", key="+4_pickq"):
-    add_card("pickq", +4)
+                      <a class="rf-btn" href="?pick={pickq}&delta=-4">-4</a>
+                      <a class="rf-btn" href="?pick={pickq}&delta=+4">+4</a>
                     </div>
                   </div>
                 </div>
@@ -525,7 +521,6 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
-
 
 
 
