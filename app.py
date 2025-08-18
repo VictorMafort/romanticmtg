@@ -1,12 +1,18 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.10f
-- Performance: cálculos da Aba 4 (distribuição de cores e fontes de mana) agora usam
-  operações vetorizadas com `explode` + `groupby` (bem mais rápido que `.apply` em loops).
-- Robustez: evita KeyError em 'qty' usando dataframes explodidos; lida com listas ausentes.
-- Mantém: ícones e % dentro dos donuts (texto centralizado), DFC image fix, chip de legalidade na Aba 1,
-  Aba 3 sem tiles invisíveis, init seguro do session_state.
+Romantic Format Tools — FINAL v14.0
+Autor: Victor + Copilot
+
+Principais features e correções:
+- Tab 1: sugestão com **chip de legalidade dentro da carta** e tamanho **capado** (single card não fica gigante).
+- Tab 2: **text area** para decklist + botão para enviar ao Deckbuilder.
+- Tab 3: **legalidade e quantidade dentro da carta**, tamanho **fixo**, **pula cartas sem imagem** (evita “invisíveis”), +/- estável.
+- Tab 4: análise com **donuts (Altair)** usando **ícones de mana** e **%** no rótulo, texto **centralizado**; 
+         cálculos **vetorizados** (explode+groupby) → muito mais rápido; 
+         tabela de **subtipos de criaturas** sem índice.
+- Geral: **DFC image fix** (usa `card_faces[0].image_uris` quando necessário), cache com **salt** das coleções, 
+         **init seguro** do `session_state`, throttle + retry leve nas chamadas Scryfall.
 """
 import re
 import time
@@ -32,7 +38,7 @@ if 'last_action' not in st.session_state:
 # --------------------
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "RomanticFormatTools/2.1 (+seu_email_ou_site)",
+    "User-Agent": "RomanticFormatTools/2.2 (+seu_email_ou_site)",
     "Accept": "application/json;q=0.9,*/*;q=0.8",
 })
 _last = deque(maxlen=10)
@@ -48,50 +54,59 @@ def throttle():
 # Config & listas
 # --------------------
 allowed_sets = {
-    "8ED","MRD","DST","5DN","CHK","BOK","SOK","9ED","RAV","GPT","DIS","CSP","TSP","TSB","PLC","FUT","10E","LRW","MOR","SHM","EVE","ALA","CON","ARB","M10","ZEN","WWK","ROE","M11","SOM","MBS","NPH","M12","ISD","DKA","AVR","M13",
+    "8ED","MRD","DST","5DN","CHK","BOK","SOK","9ED","RAV","GPT","DIS","CSP","TSP","TSB","PLC","FUT",
+    "10E","LRW","MOR","SHM","EVE","ALA","CON","ARB","M10","ZEN","WWK","ROE","M11","SOM","MBS","NPH",
+    "M12","ISD","DKA","AVR","M13",
 }
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 _ALLOWED_FPRINT = ",".join(sorted(allowed_sets))
 
 # --------------------
-# Utilidades
+# Utilidades de busca
 # --------------------
+
+def _get(url, timeout=8, tries=2):
+    for t in range(tries):
+        try:
+            throttle(); resp = SESSION.get(url, timeout=timeout)
+            if resp.status_code == 200:
+                return resp
+        except Exception:
+            pass
+        time.sleep(0.25 * (t+1))
+    return None
 
 def buscar_sugestoes(query: str):
     q = query.strip()
     if len(q) < 2:
         return []
     url = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(q)}"
-    try:
-        throttle(); r = SESSION.get(url, timeout=8)
-        if r.ok:
+    r = _get(url)
+    if r:
+        try:
             return r.json().get("data", [])
-    except Exception:
-        pass
+        except Exception:
+            return []
     return []
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
-    """Busca dados via Scryfall (com suporte a DFC e quick-scan de sets)."""
+    """Busca dados via Scryfall.
+    - Corrige DFC: se não houver image_uris no topo, usa card_faces[0].image_uris
+    - Limita sets (allowed_sets) p/ checar legalidade
+    - Retry leve + throttle
+    Retorna dict com: name, sets, image, type, cmc, mana_cost, colors, color_identity, produced_mana
+    """
     safe_name = card_name.strip()
     url_named = f"https://api.scryfall.com/cards/named?fuzzy={urllib.parse.quote(safe_name)}"
-
-    def _get(url, timeout=8, tries=2):
-        for t in range(tries):
-            try:
-                throttle(); resp = SESSION.get(url, timeout=timeout)
-                if resp.status_code == 200:
-                    return resp
-            except Exception:
-                pass
-            time.sleep(0.25 * (t+1))
+    resp = _get(url_named)
+    if not resp:
+        return None
+    data = resp.json()
+    if "prints_search_uri" not in data:
         return None
 
-    resp = _get(url_named)
-    if not resp: return None
-    data = resp.json()
-    if "prints_search_uri" not in data: return None
-
+    # imagem (inclui DFC)
     def pick_image(card: dict):
         img = (card.get("image_uris", {}) or {}).get("normal") or (card.get("image_uris", {}) or {}).get("small")
         if img: return img
@@ -104,6 +119,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
 
     base_img = pick_image(data)
 
+    # quick scan: restringe aos sets permitidos
     all_sets = set()
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     q_str = f'!"{safe_name}" e:({set_query})'
@@ -113,9 +129,11 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
         jq = rq.json()
         if jq.get("total_cards", 0) > 0:
             for c in jq.get("data", []):
-                if "Token" in (c.get("type_line") or ""): continue
+                if "Token" in (c.get("type_line") or ""):
+                    continue
                 sc = (c.get("set") or "").upper()
-                if sc: all_sets.add(sc)
+                if sc:
+                    all_sets.add(sc)
             return {
                 "name": data.get("name", ""),
                 "sets": all_sets,
@@ -128,18 +146,21 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
                 "produced_mana": data.get("produced_mana"),
             }
 
-    # fallback prints
+    # fallback: varre prints
     next_page = data["prints_search_uri"]
     while next_page:
         p = _get(next_page)
         if not p: break
         j = p.json()
         for c in j.get("data", []):
-            if "Token" in (c.get("type_line") or ""): continue
+            if "Token" in (c.get("type_line") or ""):
+                continue
             sc = (c.get("set") or "").upper()
-            if sc: all_sets.add(sc)
+            if sc:
+                all_sets.add(sc)
             if sc in allowed_sets:
-                next_page = None; break
+                next_page = None
+                break
         else:
             next_page = j.get("next_page")
 
@@ -161,7 +182,7 @@ def check_legality(name, sets):
     return "⚠️ Not Legal", "warning"
 
 # --------------------
-# App + CSS base
+# App + CSS (layout estável)
 # --------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
@@ -170,14 +191,81 @@ with st.sidebar:
     if st.button("🔄 Limpar cache de cartas"):
         fetch_card_data.clear(); st.rerun()
 
+st.markdown(
+    """
+    <style>
+    :root{
+      /* Largura base do container */
+      --rf-container-w: min(1200px, calc(100vw - 6rem));
+      --rf-col-gap: 1.1rem;  --rf-col-pad: .35rem;
+
+      /* TAB 1 — cap rígido p/ não estourar quando só 1 carta */
+      --rf-card1-max: 300px; /* ajuste fino */
+
+      /* TAB 3 — tamanho fixo p/ galeria */
+      --rf-card3-max: 300px;
+
+      --rf-overlimit: #ef4444;
+    }
+    .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); background:#0b0b0b08; }
+    .rf-card img.rf-img{ display:block; width:100%; height:auto; }
+
+    /* Cap da carta na Tab 1 (não cresce além de 300px) */
+    .rf-fixed1{ max-width: var(--rf-card1-max); margin:0 auto; }
+
+    /* Cap da carta na Tab 3 (galeria) */
+    .rf-fixed3{ max-width: var(--rf-card3-max); margin:0 auto; }
+
+    .rf-name-badge{
+      position:absolute; left:50%; transform:translateX(-50%);
+      top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px;
+      background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18);
+      border:1px solid rgba(0,0,0,.08); white-space:nowrap; max-width:92%; overflow:hidden; text-overflow:ellipsis;
+      z-index:5;
+    }
+    .rf-qty-badge{
+      position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65);
+      color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px;
+      border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px); z-index:6;
+    }
+    .rf-qty-badge.rf-over{ color: var(--rf-overlimit) !important; }
+
+    .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
+    .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
+    .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
+
+    /* Belt +/- da Tab 3 */
+    .rf-inart-belt{ max-width: var(--rf-card3-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20; }
+
+    /* Botões gerais (após a belt) */
+    .rf-inart-belt + div [data-testid="column"] div.stButton>button,
+    .rf-inart-belt ~ div [data-testid="column"] div.stButton>button{
+      width:auto; min-width:40px; height:40px; padding:0 14px; border-radius:999px; font-size:18px; font-weight:800; line-height:1;
+      display:inline-flex; align-items:center; justify-content:center; color:#0f172a !important; background:rgba(255,255,255,.95);
+      border:1px solid rgba(0,0,0,.10); box-shadow:0 1px 4px rgba(0,0,0,.18);
+    }
+    .rf-inart-belt + div [data-testid="column"] div.stButton>button:hover,
+    .rf-inart-belt ~ div [data-testid="column"] div.stButton>button:hover{ background:#eef2f7 }
+
+    [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
+    @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
+    @media (max-width:820px){  [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("🧙 Romantic Format Tools")
 
-tab1, tab2, tab3, tab4 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)", "📊 Análise"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)", "📊 Análise"
+])
 
 # Helper HTML do card
 
 def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", overlimit: bool = False) -> str:
-    cls = f"rf-card {extra_cls}".strip(); img_src = img_url or ""
+    cls = f"rf-card {extra_cls}".strip()
+    img_src = img_url or ""
     qty_cls = "rf-qty-badge rf-over" if overlimit else "rf-qty-badge"
     return f"""
     <div class='{cls}'>
@@ -188,65 +276,110 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
     """
 
 # --------------------
-# Tab 1 (compacto, com chip de legalidade)
+# TAB 1 — Sugestões (chip de legalidade + tamanho capado)
 # --------------------
 with tab1:
     import html as _html
-    query = st.text_input("Digite o começo do nome da carta:")
+    st.caption("Digite o começo do nome da carta e use +/− para ajustar no seu deck.")
+    query = st.text_input("Buscar carta:")
     COLS_TAB1 = 3
+
     thumbs = []
     if query.strip():
-        for nm in buscar_sugestoes(query.strip())[:21]:
+        for nm in buscar_sugestoes(query.strip())[:24]:
             d = fetch_card_data(nm)
             if d and d.get("image"):
                 status_text, status_type = check_legality(d["name"], d.get("sets", set()))
                 thumbs.append((d["name"], d["image"], status_text, status_type))
+
     if thumbs:
-        st.caption("🔎 Sugestões:")
         for i in range(0, len(thumbs), COLS_TAB1):
             cols = st.columns(min(COLS_TAB1, len(thumbs) - i))
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
                 with cols[j]:
-                    ph = st.empty(); qty = st.session_state.deck.get(name, 0)
+                    qty = st.session_state.deck.get(name, 0)
                     label = "Banned" if status_type=="danger" else ("Not Legal" if status_type=="warning" else "Legal")
                     chip_class = "" if status_type=="success" else (" rf-chip-danger" if status_type=="danger" else " rf-chip-warning")
                     legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
                     badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
-                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
+                    st.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1", overlimit=False), unsafe_allow_html=True)
 
                     bcols = st.columns([1,1,1,1,1,1], gap="small")
-                    clicked=False; base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-                    if bcols[1].button("−4", key=f"{base_key}_m4"): st.session_state.deck[name]=max(0,qty-4); clicked=True
-                    if bcols[2].button("−1", key=f"{base_key}_m1"): st.session_state.deck[name]=max(0,qty-1); clicked=True
-                    if bcols[3].button("+1", key=f"{base_key}_p1"): st.session_state.deck[name]=qty+1; clicked=True
-                    if bcols[4].button("+4", key=f"{base_key}_p4"): st.session_state.deck[name]=qty+4; clicked=True
-                    if st.session_state.deck.get(name,0)<=0 and clicked: st.rerun()
-                    if clicked:
-                        qty2 = st.session_state.deck.get(name,0)
-                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
+                    base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
+                    if bcols[1].button("−4", key=f"{base_key}_m4"):
+                        st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0)-4)
+                        if st.session_state.deck[name] == 0: del st.session_state.deck[name]
+                    if bcols[2].button("−1", key=f"{base_key}_m1"):
+                        st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0)-1)
+                        if st.session_state.deck[name] == 0: del st.session_state.deck[name]
+                    if bcols[3].button("+1", key=f"{base_key}_p1"):
+                        st.session_state.deck[name] = st.session_state.deck.get(name,0)+1
+                    if bcols[4].button("+4", key=f"{base_key}_p4"):
+                        st.session_state.deck[name] = st.session_state.deck.get(name,0)+4
 
 # --------------------
-# Tab 3 — Artes (sem tiles invisíveis)
+# TAB 2 — Decklist Checker (text area restaurada)
+# --------------------
+with tab2:
+    st.subheader("📦 Decklist Checker")
+    st.write("Cole sua decklist abaixo (1 por linha). Formatos aceitos: `4x Nome`, `4 Nome`, `Nome`.")
+    deck_input = st.text_area("Decklist", height=260, key="deck_text_area")
+
+    def process_line(line: str):
+        line = re.sub(r'#.*$', '', line).strip()
+        if not line: return None
+        m = re.match(r'^(SB:)?\s*(\d+)?\s*x?\s*(.+)$', line, re.IGNORECASE)
+        if not m: return (line, 1, "❌ Card not found or API error", "danger", None)
+        qty = int(m.group(2) or 1); name_guess = m.group(3).strip()
+        card = fetch_card_data(name_guess)
+        if not card: return (name_guess, qty, "❌ Card not found or API error", "danger", None)
+        status_text, status_type = check_legality(card["name"], card.get("sets", set()))
+        return (card["name"], qty, status_text, status_type, card.get("sets", set()))
+
+    if deck_input.strip():
+        lines = deck_input.splitlines()
+        with st.spinner("Checando decklist..."):
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                results = list(ex.map(process_line, lines))
+        results = [r for r in results if r]
+        for name, qty, status_text, status_type, _ in results:
+            color = {"success":"green","warning":"orange","danger":"red"}[status_type]
+            st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
+        st.markdown("---")
+        if st.button("📥 Enviar ao Deckbuilder"):
+            for name, qty, status_text, status_type, _ in results:
+                if status_type != "danger":
+                    st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
+            st.success("Deck adicionado na Aba 3.")
+
+# --------------------
+# TAB 3 — Deckbuilder (artes) — overlay e qty DENTRO da carta
 # --------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
     cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
-    total = sum(st.session_state.deck.values()); st.markdown(f"**Total de cartas:** {total}")
+    total = sum(st.session_state.deck.values())
+    st.markdown(f"**Total de cartas:** {total}")
 
     if not st.session_state.deck:
-        st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
+        st.info("Seu deck está vazio. Use as Abas 1 ou 2 para adicionar cartas.")
     else:
-        snap = dict(st.session_state.deck); names = sorted(snap.keys(), key=lambda x: x.lower())
+        snap = dict(st.session_state.deck)
+        names = sorted(snap.keys(), key=lambda x: x.lower())
+
         def load_one(nm:str):
             try:
-                d = fetch_card_data(nm); sets = d.get("sets", set()) if d else set()
-                s_text, s_type = check_legality(nm, sets)
-                return (nm, snap.get(nm,0), (d.get("type","") if d else ''), (d.get("image") if d else None), s_text, s_type)
+                d = fetch_card_data(nm)
+                sets = d.get("sets", set()) if d else set()
+                status_text, status_type = check_legality(nm, sets)
+                return (nm, snap.get(nm,0), (d.get("type","") if d else ''), (d.get("image") if d else None), status_text, status_type)
             except Exception:
                 return (nm, snap.get(nm,0), '', None, '', 'warning')
+
         with st.spinner("Carregando artes..."):
             with ThreadPoolExecutor(max_workers=min(6, max(1, len(names)))) as ex:
                 items = list(ex.map(load_one, names))
+
         def bucket(tline:str)->str:
             tl = tline or ''
             if 'Land' in tl: return 'Terrenos'
@@ -257,53 +390,58 @@ with tab3:
             if 'Enchantment' in tl: return 'Encantamentos'
             if 'Artifact' in tl: return 'Artefatos'
             return 'Outros'
+
         buckets = defaultdict(list)
         for name, qty, tline, img, s_text, s_type in items:
             buckets[bucket(tline)].append((name, qty, tline, img, s_text, s_type))
+
         order = ["Criaturas","Instantâneas","Feitiços","Artefatos","Encantamentos","Planeswalkers","Terrenos","Outros"]
         skipped = 0
         for sec in order:
             if sec not in buckets: continue
             group = buckets[sec]
-            st.markdown(f"<div class='rf-sec-title'>{sec} — {sum(q for _, q, _, _, _, _ in group)}</div>", unsafe_allow_html=True)
+            st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _ in group)}")
+
             for i in range(0, len(group), cols_per_row):
-                row = group[i:i+cols_per_row]; cols = st.columns(len(row))
-                for col, (name, _qty_init, _t, img, s_text, s_type) in zip(cols, row):
+                row = group[i:i+cols_per_row]
+                cols = st.columns(len(row))
+                for col, (name, _q0, _t, img, s_text, s_type) in zip(cols, row):
                     qty = st.session_state.deck.get(name, 0)
                     if qty <= 0: continue
                     if not img: skipped += 1; continue
+
                     with col:
-                        card_ph = st.empty()
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
                         legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
-                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty>4)), unsafe_allow_html=True)
+                        st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty>4)), unsafe_allow_html=True)
+
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
-                        left_sp, mid, right_sp = st.columns([1,2,1])
-                        with mid:
-                            minus_c, plus_c = st.columns([1,1], gap="small")
-                            if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
-                                st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0)-1)
-                                if st.session_state.deck.get(name, 0) <= 0: st.rerun()
-                                new_qty = st.session_state.deck.get(name, 0)
-                                card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3", overlimit=(new_qty>4)), unsafe_allow_html=True)
-                            if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
-                                st.session_state.deck[name] = st.session_state.deck.get(name,0)+1
-                                new_qty = st.session_state.deck.get(name, 0)
-                                card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3", overlimit=(new_qty>4)), unsafe_allow_html=True)
-            st.markdown("---")
+                        mcol, pcol = st.columns([1,1])
+                        if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                            new = max(0, st.session_state.deck.get(name,0)-1)
+                            if new==0:
+                                del st.session_state.deck[name]
+                                st.rerun()
+                            else:
+                                st.session_state.deck[name] = new
+                        if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                            st.session_state.deck[name] = st.session_state.deck.get(name,0)+1
+                st.markdown("---")
         if skipped:
-            st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem no momento (evitando espaços invisíveis).")
+            st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
 
 # --------------------
-# Tab 4 — Análise (ícones + % nos donuts, otimizada)
+# TAB 4 — Análise (donuts vetorizados, ícones e %)
 # --------------------
 with tab4:
     st.subheader("📊 Análise do Deck")
     if not st.session_state.deck:
-        st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
+        st.info("Seu deck está vazio. Adicione cartas nas Abas 1/2/3.")
     else:
-        snap = dict(st.session_state.deck); names = sorted(snap.keys(), key=lambda x: x.lower())
+        snap = dict(st.session_state.deck)
+        names = sorted(snap.keys(), key=lambda x: x.lower())
+
         def load_meta(nm:str):
             try:
                 d = fetch_card_data(nm)
@@ -316,12 +454,13 @@ with tab4:
                 }
             except Exception:
                 return {'name': nm, 'qty': snap.get(nm,0), 'type_line': '', 'color_identity': [], 'produced_mana': []}
-        with st.spinner("Carregando estatísticas..."):
+
+        with st.spinner("Calculando estatísticas..."):
             with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
                 meta = list(ex.map(load_meta, names))
         df = pd.DataFrame(meta)
 
-        # --- 🧩 Subtipos de Criaturas (tabela sem índice) ---
+        # ===== Subtipos de Criaturas =====
         st.markdown("### 🧩 Subtipos de **Criaturas**")
         def extract_subtypes(tline:str):
             if not tline or 'Creature' not in tline: return []
@@ -342,16 +481,18 @@ with tab4:
         else:
             st.info("Nenhuma criatura com subtipo identificada no deck.")
 
-        # ===== Utilitários de donuts (ícones + % centralizado) =====
+        # ===== Donuts: ícones + % centralizado, cálculo vetorizado =====
         letters = ['W','U','B','R','G','C']
         mana_icons = {'W':'⚪','U':'🔵','B':'⚫','R':'🔴','G':'🟢','C':'⬜️'}
-        color_map = {'W':'#d6d3c2','U':'#2b6cb0','B':'#1f2937','R':'#c53030','G':'#2f855a','C':'#6b7280'}
+        color_map  = {'W':'#d6d3c2','U':'#2b6cb0','B':'#1f2937','R':'#c53030','G':'#2f855a','C':'#6b7280'}
+
         def build_donut_df(values: dict, label='Cor', val_name='Valor'):
             dfx = pd.DataFrame({label: letters, val_name: [int(values.get(k,0)) for k in letters]})
             total = int(dfx[val_name].sum())
             dfx['pct'] = dfx[val_name].apply(lambda v: (v/total*100.0) if total else 0.0)
             dfx['label_text'] = dfx.apply(lambda r: f"{mana_icons[r[label]]} {int(r[val_name])} ({r['pct']:.1f}%)", axis=1)
             return dfx
+
         def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str):
             dff = df_vals[df_vals[value_col] > 0].copy()
             if dff.empty:
@@ -371,26 +512,25 @@ with tab4:
             txt = chart.mark_text(radius=95, size=12, align='center', baseline='middle').encode(text='label_text:N', color=alt.Color('textColor:N', scale=None))
             return (arc + txt).properties(height=320)
 
-        # ===== 🎨 Distribuição de cores (vectorizada) =====
+        # 🎨 Distribuição de cores
         st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
-        # explode nas cores; cartas sem cor contam como C
         ci_df = df[['qty','color_identity']].copy()
         ci_df['color_identity'] = ci_df['color_identity'].apply(lambda x: x if isinstance(x, list) else [])
         ex = ci_df.explode('color_identity')
-        # soma por cor nas que têm CI
         s_ci = ex.groupby('color_identity', dropna=True)['qty'].sum(min_count=1)
         dist_vals = {k: int(s_ci.get(k, 0)) for k in letters}
-        # soma colorless
+        # colorless (sem identidade)
         colorless_qty = int(df[df['color_identity'].apply(lambda x: not bool(x))]['qty'].sum())
         dist_vals['C'] += colorless_qty
         dist_df = build_donut_df(dist_vals, val_name='Cópias')
         st.altair_chart(donut_altair(dist_df, 'Cor', 'Cópias'), use_container_width=True)
-        st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; por isso as porcentagens podem somar mais de 100%.")
+        st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; por isso as % podem somar >100%.")
 
-        # ===== ⛲ Fontes de mana (vectorizado, com explode) =====
+        # ⛲ Fontes de mana
         st.markdown("### ⛲ Fontes de mana por cor")
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, list) and len(v) > 0)
         sources_df = df.loc[is_source, ['qty','type_line','produced_mana']].copy()
+        # Todas
         if not sources_df.empty:
             ex_all = sources_df.explode('produced_mana')
             ex_all = ex_all[ex_all['produced_mana'].isin(letters)]
@@ -398,18 +538,20 @@ with tab4:
             vals_all = {k: int(s_all.get(k,0)) for k in letters}
         else:
             vals_all = {k: 0 for k in letters}
-
-        land_mask = sources_df['type_line'].apply(lambda t: isinstance(t, str) and ('Land' in t)) if not sources_df.empty else pd.Series([], dtype=bool)
-        land_df = sources_df.loc[land_mask, ['qty','produced_mana']]
-        if not land_df.empty:
-            ex_land = land_df.explode('produced_mana')
-            ex_land = ex_land[ex_land['produced_mana'].isin(letters)]
-            s_land = ex_land.groupby('produced_mana')['qty'].sum()
-            vals_land = {k: int(s_land.get(k,0)) for k in letters}
+        # Somente terrenos
+        if not sources_df.empty:
+            land_df = sources_df[sources_df['type_line'].apply(lambda t: isinstance(t,str) and ('Land' in t))][['qty','produced_mana']]
+            if not land_df.empty:
+                ex_land = land_df.explode('produced_mana')
+                ex_land = ex_land[ex_land['produced_mana'].isin(letters)]
+                s_land = ex_land.groupby('produced_mana')['qty'].sum()
+                vals_land = {k: int(s_land.get(k,0)) for k in letters}
+            else:
+                vals_land = {k: 0 for k in letters}
         else:
             vals_land = {k: 0 for k in letters}
 
-        pie_all = build_donut_df(vals_all, val_name='Fontes')
+        pie_all  = build_donut_df(vals_all,  val_name='Fontes')
         pie_land = build_donut_df(vals_land, val_name='Fontes')
         c1, c2 = st.columns(2)
         with c1:
