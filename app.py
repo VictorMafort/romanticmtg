@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v4 (overlay + flash em botões)
-- Badge de legalidade SOBRE a arte da carta (dentro da imagem), pulando uma faixa para não cobrir o nome
-- Controles abaixo da carta em 3 colunas: [-1 +1] | badge overlay já na imagem | [-4 +4]
-- Flash verde no botão quando adiciona; flash vermelho quando remove (aparece na próxima renderização)
-- Responsivo com media queries (1100/820/640/480)
+Romantic Format Tools - v5 (overlay + contador + flash sem deslocar layout)
+- Badge de legalidade sobre a arte (offset para não cobrir o nome)
+- Contador de quantidade do deck como chip no canto inferior direito da arte
+- Efeito de feedback visual nos botões (verde ao adicionar, vermelho ao remover)
+  sem deslocar layout (marcador zero-dimensões + animação no próprio botão)
 """
 import re
 import time
@@ -20,7 +20,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/0.9 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/1.0 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -175,61 +175,80 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
-# CSS (overlay + flash + responsivo)
+# CSS (overlay + contador + flash sem deslocar)
 st.markdown(
     """
     <style>
-    /* Card com overlay */
+    /* Card com overlay e contador */
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
 
-    /* Badge sobre a arte: colocada um pouco abaixo do topo pra não cobrir o nome */
+    /* Badge de legalidade sobre a arte */
     .rf-badge-overlay{
         position:absolute; left:50%; transform:translateX(-50%);
-        top: 40px; /* ~uma linha abaixo da barra do nome */
+        top: 40px;
         padding: 4px 10px; border-radius:999px; font-weight:700; font-size:12px;
         background: rgba(255,255,255,.96); color:#0f172a;
         box-shadow: 0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
-        pointer-events:none; /* não intercepta cliques */
-        white-space:nowrap;
+        pointer-events:none; white-space:nowrap;
     }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Botões-pílula preenchendo a coluna */
+    /* Contador no canto inferior direito da arte */
+    .rf-qty-badge{
+        position:absolute; right:8px; bottom:8px;
+        background: rgba(0,0,0,.65); color:#fff;
+        padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px;
+        border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
+    }
+
+    /* Botões-pílula */
     div.stButton>button{
         width:100%; min-width:0; padding:6px 10px; border-radius:999px;
         border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
         font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08);
-        transition: background .15s ease, box-shadow .15s ease;
+        transition: background .15s ease, box-shadow .15s ease, filter .15s ease;
     }
     div.stButton>button:hover{ background:#f1f5f9 }
 
-    /* Flash nos botões: usamos um marcador antes do botão (.flash-add/rem) e estilizamos o irmão seguinte */
-    @keyframes rfFlashGreen{ 0%{background:#dcfce7; box-shadow:0 0 0 2px #86efac} 60%{background:#f0fdf4} 100%{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08)} }
-    @keyframes rfFlashRed{ 0%{background:#fee2e2; box-shadow:0 0 0 2px #fca5a5} 60%{background:#fef2f2} 100%{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08)} }
-    .flash-add + div button{ animation: rfFlashGreen .9s ease-out 1 }
-    .flash-rem + div button{ animation: rfFlashRed .9s ease-out 1 }
+    /* Marcadores de flash que não ocupam espaço (evita deslocar layout) */
+    .rf-flash-marker{ position:absolute; width:0; height:0; overflow:hidden; }
 
-    /* Espaços e responsivo */
+    /* Animações aplicadas no botão seguinte ao marcador */
+    @keyframes rfFlashGreen{ 0%{filter:drop-shadow(0 0 0 #86efac)} 30%{filter:drop-shadow(0 0 6px #86efac)} 100%{filter:none} }
+    @keyframes rfFlashRed{ 0%{filter:drop-shadow(0 0 0 #fca5a5)} 30%{filter:drop-shadow(0 0 6px #fca5a5)} 100%{filter:none} }
+    .rf-flash-add + div button{ animation: rfFlashGreen .6s ease-out 1 }
+    .rf-flash-rem + div button{ animation: rfFlashRed .6s ease-out 1 }
+
+    /* Acessibilidade: desativa animação se usuário preferir menos movimento */
+    @media (prefers-reduced-motion: reduce){
+      .rf-flash-add + div button, .rf-flash-rem + div button{ animation: none }
+    }
+
     .rf-spacer{height:8px}
 
+    /* Responsivo */
     @media (max-width:1100px){
         .rf-badge-overlay{ top:36px; font-size:11.5px; padding:3px 9px }
+        .rf-qty-badge{ font-size:11.5px; padding:2px 7px }
         div.stButton>button{ font-size:12px; padding:5px 10px }
     }
     @media (max-width:820px){
         .rf-badge-overlay{ top:34px; font-size:11px; padding:3px 8px }
+        .rf-qty-badge{ font-size:11px; padding:2px 7px }
         div.stButton>button{ font-size:11.5px; padding:4px 9px }
         [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem }
     }
     @media (max-width:640px){
         .rf-badge-overlay{ top:30px; font-size:10.5px; padding:2px 7px }
+        .rf-qty-badge{ font-size:10.5px; padding:2px 6px }
         div.stButton>button{ font-size:11px; padding:3px 8px }
     }
     @media (max-width:480px){
         .rf-badge-overlay{ top:28px; font-size:10px; padding:2px 6px }
+        .rf-qty-badge{ font-size:10px; padding:2px 6px }
         div.stButton>button{ font-size:10.5px; padding:3px 7px }
     }
     </style>
@@ -265,51 +284,50 @@ with tab1:
             cols = st.columns(cols_per_row)
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
+                qty = st.session_state.deck.get(nome, 0)
                 with cols[j]:
-                    # Card com overlay (HTML único para não quebrar o wrapper)
+                    # Card com overlays (legalidade + contador)
                     st.markdown(
                         f"""
                         <div class='rf-card'>
                           <img src='{img}' class='rf-img' alt='{nome}'/>
                           <div class='rf-badge-overlay {_badge_class(status_type)}'>{status_text}</div>
+                          <div class='rf-qty-badge'>x{qty}</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
-                    # Espaço pequeno entre imagem e controles
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
-                    # Linha inferior: [-1 +1] | (overlay já na imagem) | [-4 +4]
                     left, mid, right = st.columns([2.2, 0.6, 2.2], gap="small")
 
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
                         with c1:
                             if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<div class="flash-rem"></div>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-flash-marker rf-flash-rem"></span>', unsafe_allow_html=True)
                             if st.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
                                 remove_card(nome, 1)
                         with c2:
                             if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<div class="flash-add"></div>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-flash-marker rf-flash-add"></span>', unsafe_allow_html=True)
                             if st.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
                                 add_card(nome, 1)
 
                     with mid:
-                        # Coluna "spacer" central apenas para equilibrar
                         st.write("")
 
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
                         with c3:
                             if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<div class="flash-rem"></div>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-flash-marker rf-flash-rem"></span>', unsafe_allow_html=True)
                             if st.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
                                 remove_card(nome, 4)
                         with c4:
                             if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<div class="flash-add"></div>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-flash-marker rf-flash-add"></span>', unsafe_allow_html=True)
                             if st.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
                                 add_card(nome, 4)
 
