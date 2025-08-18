@@ -1,14 +1,19 @@
+
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.0
+Romantic Format Tools — FINAL v18.1
 Autor: Victor + Copilot
 
-Mudanças nesta versão (v18):
-- Remove o uso de st.rerun() em callbacks (evita no-op). 
+Mudanças nesta versão (v18.1):
+- Corrige SchemaValidationError do Altair no donut: substitui `order=alt.Order(..., sort=letters)`
+  por índice calculado via `transform_calculate` + `order=alt.Order('sort_index:Q')` (compatível com o schema Vega-Lite v5).
+- Mantém demais comportamentos e estilos.
+
+Mudanças prévias (v18.0):
+- Remove o uso de st.rerun() em callbacks (evita no-op).
 - Implementa atualização IMEDIATA de quantidades processando os botões (+/−) ANTES do render das cartas.
 - Mantém: slider removido na Aba 3; teto visual de 3 colunas via CSS; donuts com midAngle + legenda com contagens.
 """
-
 import re
 import time
 import urllib.parse
@@ -53,7 +58,6 @@ ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 _ALLOWED_FPRINT = ",".join(sorted(allowed_sets))
 
 # ===== Utilidades de busca =====
-
 def _get(url, timeout=8, tries=2):
     for t in range(tries):
         try:
@@ -162,6 +166,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
         "produced_mana": data.get("produced_mana"),
     }
 
+
 def check_legality(name, sets):
     if name in ban_list:
         return "❌ Banned", "danger"
@@ -187,8 +192,8 @@ st.markdown(
       --rf-card1-max: 300px;
       /* TAB 3 — cap = largura equivalente a 3 colunas */
       --rf-card3-max: calc(
-          (var(--rf-container-w) - (3 - 1) * var(--rf-col-gap) - 3 * (2 * var(--rf-col-pad)))
-          / 3
+        (var(--rf-container-w) - (3 - 1) * var(--rf-col-gap) - 3 * (2 * var(--rf-col-pad)))
+        / 3
       );
       --rf-overlimit: #ef4444;
     }
@@ -261,7 +266,6 @@ with tab1:
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
                 with cols[j]:
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-
                     # 1) PROCESSA BOTÕES PRIMEIRO (sem callbacks)
                     bcols = st.columns([1,1,1,1,1,1], gap="small")
                     if bcols[1].button("−4", key=f"{base_key}_m4"):
@@ -313,7 +317,7 @@ with tab2:
         with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as ex:
                 results = list(ex.map(process_line, lines))
-            results = [r for r in results if r]
+        results = [r for r in results if r]
         for name, qty, status_text, status_type, _ in results:
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
             st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
@@ -404,6 +408,7 @@ with tab3:
                             if not img:
                                 skipped += 1
                             continue
+
                         chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
                         legal_html = (
                             f"<span class='rf-legal-chip{chip_class}'>" +
@@ -412,8 +417,9 @@ with tab3:
                         ) if s_type != "success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
                         st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
-                        st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
+            st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
             st.markdown("---")
+
         if skipped:
             st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
 
@@ -444,14 +450,16 @@ with tab4:
         with st.spinner("Calculando estatísticas..."):
             with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
                 meta = list(ex.map(load_meta, names))
-            df = pd.DataFrame(meta)
+        df = pd.DataFrame(meta)
 
         # ===== Subtipos de Criaturas =====
         st.markdown("### 🪩 Subtipos de **Criaturas**")
+
         def extract_subtypes(tline: str):
             if not tline or 'Creature' not in tline:
                 return []
-            parts = re.split(r'\s+[—\-–]\s+', tline)
+            # Divide no separador de tipo/subtipo (—, -, –)
+            parts = re.split(r'\s*[—\-–]\s*', tline)
             if len(parts) < 2:
                 return []
             subs = parts[1]
@@ -463,6 +471,7 @@ with tab4:
                 continue
             for s in extract_subtypes(r['type_line']):
                 rows.append({'Subtipo': s, 'Carta': r['name'], 'Cópias': int(r['qty'])})
+
         if rows:
             dsubs = pd.DataFrame(rows)
             agg = dsubs.groupby('Subtipo', as_index=False)['Cópias'].sum().sort_values('Cópias', ascending=False)
@@ -483,7 +492,8 @@ with tab4:
             dfx['label_text'] = dfx.apply(lambda r: f"{mana_icons[r[label]]} {int(r[val_name])} ({r['pct']:.1f}%)", axis=1)
             return dfx
 
-        def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str, legend_counts: dict | None = None, title: str | None = None):
+        def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str,
+                         legend_counts: dict | None = None, title: str | None = None):
             dff = df_vals[df_vals[value_col] > 0].copy()
             if dff.empty:
                 return alt.Chart(pd.DataFrame({'v':[1]})).mark_text(text='(vazio)').properties(height=200)
@@ -498,33 +508,47 @@ with tab4:
                 label_expr = " : ".join(parts + ["datum.label"])
                 legend = alt.Legend(title=title, labelExpr=label_expr)
 
-            base = alt.Chart(dff)
+            base = (
+                alt.Chart(dff)
+                .transform_calculate(
+                    sort_index="indexof(['W','U','B','R','G','C'], toString(datum." + label_col + "))"
+                )
+            )
+
             enc = dict(
                 theta=alt.Theta(field=value_col, type='quantitative', stack=True),
-                color=alt.Color(field=label_col, type='nominal',
-                                scale=alt.Scale(domain=letters, range=[color_map[k] for k in letters]),
-                                legend=legend),
-                order=alt.Order(f'{label_col}:N', sort=letters),
-                tooltip=[alt.Tooltip(label_col, title='Cor'), alt.Tooltip(value_col, title='Qtd'), alt.Tooltip('pct:Q', title='%')]
+                color=alt.Color(
+                    field=label_col, type='nominal',
+                    scale=alt.Scale(domain=letters, range=[color_map[k] for k in letters]),
+                    legend=legend
+                ),
+                order=alt.Order('sort_index:Q'),
+                tooltip=[
+                    alt.Tooltip(label_col, title='Cor'),
+                    alt.Tooltip(value_col, title='Qtd'),
+                    alt.Tooltip('pct:Q', title='%')
+                ]
             )
 
             inner, outer = 70, 120
             mid = (inner + outer) // 2
 
             arc = base.encode(**enc).mark_arc(innerRadius=inner, outerRadius=outer)
+
             txt = (
                 base
                 .encode(**enc)
                 .transform_calculate(midAngle="(datum.startAngle + datum.endAngle)/2")
                 .mark_text(radius=mid, align='center', baseline='middle', dy=0)
                 .encode(theta="midAngle:Q", text='label_text:N')
-                .transform_calculate(textColor="indexof(['W','C'], toString(datum." + label_col + ")) >= 0 ? 'black' : 'white'")
+                .transform_calculate(
+                    textColor="indexof(['W','C'], toString(datum." + label_col + ")) >= 0 ? 'black' : 'white'"
+                )
                 .encode(color=alt.Color('textColor:N', scale=None))
             )
-
             return (arc + txt).properties(height=320)
 
-        # 🎨 Distribuição de cores
+        # 🎨 Distribuição de cores (por **identidade de cor**)
         st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
         ci_df = df[['qty','color_identity']].copy()
         ci_df['color_identity'] = ci_df['color_identity'].apply(lambda x: x if isinstance(x, list) else [])
@@ -541,6 +565,7 @@ with tab4:
         st.markdown("### ⛲ Fontes de mana por cor")
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, list) and len(v) > 0)
         sources_df = df.loc[is_source, ['qty','type_line','produced_mana']].copy()
+
         if not sources_df.empty:
             ex_all = sources_df.explode('produced_mana')
             ex_all = ex_all[ex_all['produced_mana'].isin(letters)]
@@ -548,6 +573,7 @@ with tab4:
             vals_all = {k: int(s_all.get(k, 0)) for k in letters}
         else:
             vals_all = {k: 0 for k in letters}
+
         if not sources_df.empty:
             land_df = sources_df[sources_df['type_line'].apply(lambda t: isinstance(t,str) and ('Land' in t))][['qty','produced_mana']]
             if not land_df.empty:
@@ -562,6 +588,7 @@ with tab4:
 
         pie_all = build_donut_df(vals_all, val_name='Fontes')
         pie_land = build_donut_df(vals_land, val_name='Fontes')
+
         c1, c2 = st.columns(2)
         with c1:
             st.caption("Todas as permanentes")
@@ -569,4 +596,5 @@ with tab4:
         with c2:
             st.caption("Somente terrenos")
             st.altair_chart(donut_altair(pie_land, 'Cor', 'Fontes', legend_counts=vals_land), use_container_width=True)
+
         st.markdown("**Legenda:** ⚪ W 🔵 U ⚫ B 🔴 R 🟢 G ⬜️ C")
