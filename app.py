@@ -1,18 +1,15 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.1
+Romantic Format Tools — FINAL v18.2
 Autor: Victor + Copilot
 
-Mudanças nesta versão (v18.1):
-- Corrige SchemaValidationError do Altair no donut: substitui `order=alt.Order(..., sort=letters)`
-  por índice calculado via `transform_calculate` + `order=alt.Order('sort_index:Q')` (compatível com o schema Vega-Lite v5).
-- Mantém demais comportamentos e estilos.
-
-Mudanças prévias (v18.0):
-- Remove o uso de st.rerun() em callbacks (evita no-op).
-- Implementa atualização IMEDIATA de quantidades processando os botões (+/−) ANTES do render das cartas.
-- Mantém: slider removido na Aba 3; teto visual de 3 colunas via CSS; donuts com midAngle + legenda com contagens.
+Mudanças nesta versão (v18.2):
+- **Aba 3 (Deckbuilder)**: organiza layout dos cards e move os botões ➖/➕ para **baixo** de cada carta
+  (mais previsível e alinhado). Remove o container decorativo vazio e espaçamentos desnecessários.
+- **Botões compactos**: estilo circular e menor, para não "estourar" a grade.
+- **Símbolos de mana na Aba 3**: exibe a **identidade de cor** (⚪🔵⚫🔴🟢⬜️) junto ao nome no badge do topo da carta.
+- Mantém o fix do Altair (v18.1) nos gráficos de donut.
 """
 import re
 import time
@@ -206,8 +203,9 @@ st.markdown(
       top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px;
       background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18);
       border:1px solid rgba(0,0,0,.08); white-space:nowrap; max-width:92%; overflow:hidden; text-overflow:ellipsis;
-      z-index:5;
+      z-index:5; display:flex; align-items:center; gap:6px;
     }
+    .rf-ci{ display:inline-flex; gap:2px; font-size:12px; }
     .rf-qty-badge{
       position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65);
       color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px;
@@ -217,7 +215,20 @@ st.markdown(
     .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
     .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
     .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
-    .rf-inart-belt{ max-width: var(--rf-card3-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20; }
+
+    /* ====== Botões compactos (globais) ====== */
+    .stButton>button{
+      border-radius:999px !important;
+      height:34px; width:34px; line-height:32px;
+      padding:0 !important; text-align:center;
+      border:1px solid #334155 !important; background:#0f172a !important; color:#cbd5e1 !important;
+      box-shadow:none !important;
+    }
+    .stButton>button:hover{ filter:brightness(1.2); }
+
+    /* Diminui o espaçamento vertical entre widgets das colunas da Aba 3 */
+    .rf-tight > div{ margin-top:.35rem; margin-bottom:.25rem; }
+
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
     @media (max-width:820px){ [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
@@ -353,10 +364,11 @@ with tab3:
                     (d.get("type", "") if d else ''),
                     (d.get("image") if d else None),
                     status_text,
-                    status_type
+                    status_type,
+                    (d.get("color_identity") if d else []),
                 )
             except Exception:
-                return (nm, snap.get(nm, 0), '', None, '', 'warning')
+                return (nm, snap.get(nm, 0), '', None, '', 'warning', [])
 
         with st.spinner("Carregando artes..."):
             with ThreadPoolExecutor(max_workers=min(6, max(1, len(names)))) as ex:
@@ -374,54 +386,56 @@ with tab3:
             return 'Outros'
 
         buckets = defaultdict(list)
-        for name, qty, tline, img, s_text, s_type in items:
-            buckets[bucket(tline)].append((name, qty, tline, img, s_text, s_type))
+        for name, qty, tline, img, s_text, s_type, ci in items:
+            buckets[bucket(tline)].append((name, qty, tline, img, s_text, s_type, ci))
 
         order = ["Criaturas", "Instantâneas", "Feitiços", "Artefatos", "Encantamentos", "Planeswalkers", "Terrenos", "Outros"]
-        skipped = 0
         cols_per_row = 6  # fixo; cap visual controlado por CSS (--rf-card3-max)
+
+        mana_icons = {'W':'⚪','U':'🔵','B':'⚫','R':'🔴','G':'🟢','C':'⬜️'}
 
         for sec in order:
             if sec not in buckets:
                 continue
             group = buckets[sec]
-            st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _ in group)}")
+            st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _, _ in group)}")
             for i in range(0, len(group), cols_per_row):
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
-                for col, (name, _q0, _t, img, s_text, s_type) in zip(cols, row):
-                    # 1) PROCESSA BOTÕES PRIMEIRO (sem callbacks)
+                for col, (name, _q0, _t, img, s_text, s_type, ci) in zip(cols, row):
                     with col:
-                        mcol, pcol = st.columns([1, 1])
-                        if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
-                            new_q = max(0, st.session_state.deck.get(name,0) - 1)
-                            if new_q == 0:
-                                st.session_state.deck.pop(name, None)
-                            else:
-                                st.session_state.deck[name] = new_q
-                        if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
-                            st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
-
-                        # 2) RENDERIZA CARTA COM ESTADO ATUAL
+                        # 1) RENDERIZA CARTA PRIMEIRO
                         qty = st.session_state.deck.get(name, 0)
                         if qty <= 0 or not img:
-                            if not img:
-                                skipped += 1
                             continue
-
                         chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
                         legal_html = (
                             f"<span class='rf-legal-chip{chip_class}'>" +
                             ("Banned" if s_type == "danger" else ("Not Legal" if s_type == "warning" else "")) +
                             "</span>"
                         ) if s_type != "success" else ""
-                        overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
+                        # símbolos de mana da identidade (ou cor incolor)
+                        ci_strip = ''.join(mana_icons.get(c, '') for c in (ci or [])) or mana_icons['C']
+                        overlay = f"<div class='rf-name-badge'><span class='rf-ci'>{ci_strip}</span>{name}{legal_html}</div>"
                         st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
-            st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
-            st.markdown("---")
 
-        if skipped:
-            st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
+                        # 2) CONTROLES ABAIXO DA CARTA (compactos)
+                        with st.container():
+                            st.markdown('<div class="rf-tight"></div>', unsafe_allow_html=True)
+                            mcol, pcol = st.columns([1, 1])
+                            if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                                new_q = max(0, st.session_state.deck.get(name,0) - 1)
+                                if new_q == 0:
+                                    st.session_state.deck.pop(name, None)
+                                    st.experimental_rerun()
+                                else:
+                                    st.session_state.deck[name] = new_q
+                                    st.experimental_rerun()
+                            if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                                st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
+                                st.experimental_rerun()
+
+            st.markdown("---")
 
 # =====================================================================
 # TAB 4 — Análise (donuts)
