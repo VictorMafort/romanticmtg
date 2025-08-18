@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13 (Integrado)
-- Tab 1 (estável v8): imagem com badge de legalidade + contador xN na arte; controles [-1/+1] | [-4/+4] abaixo; atualização imediata
-- Tab 2: checker de decklist básico
-- Tab 3: Deckbuilder com ARTES em grade, agrupado por TIPO, com contador xN que atualiza NA HORA em cada tile
-- Boas práticas: threads só para carregar dados das cartas (snapshot do deck; nada de session_state dentro das threads)
+Romantic Format Tools - v13.1 (Integrado + overlays na Aba 3)
+- Tab 1 (v8 estável): badge de legalidade e contador dentro da arte; controles abaixo
+- Tab 3: cada tile mostra a ARTE com:
+  • nome da carta centralizado no topo (chip)
+  • chip de legalidade ao lado do nome, quando Not Legal ou Banned
+  • contador xN no canto inferior direito (chip)
+  • botões abaixo da arte; ao clicar, o contador do chip atualiza na hora
+- Boas práticas com threads (snapshot do deck; sem session_state nas threads)
 """
 import re
 import time
@@ -20,7 +23,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/1.9 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/2.0 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -97,7 +100,7 @@ def fetch_card_data(card_name):
     except Exception:
         pass
 
-    # Busca completa por prints (early stop se achar set permitido)
+    # Busca completa por prints
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -157,35 +160,47 @@ def remove_card(card_name, qty=1):
     st.session_state.last_action = "remove"
 
 # -------------------------
-# App + CSS (layout centrado para manter a Tab 1 como no v8)
+# App + CSS
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
 st.markdown(
     """
     <style>
-    /* Imagem base + sombra */
+    /* Comum */
     [data-testid="stImage"] img, .rf-img{ display:block; width:100%; height:auto; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    div.stButton>button{ width:100%; min-width:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a; font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    div.stButton>button:hover{ background:#f1f5f9 }
+    .rf-spacer{ height:6px }
 
-    /* Overlays Tab 1 (v8) */
+    /* Overlays (badge legal + qty) */
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
-    .rf-badge-overlay{ position:absolute; left:50%; transform:translateX(-50%); top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px; background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08); pointer-events:none; white-space:nowrap; }
+
+    /* Badge (usada na Tab1 e Nome na Tab3) */
+    .rf-badge-overlay, .rf-name-badge{
+        position:absolute; left:50%; transform:translateX(-50%);
+        top: 40px; padding: 4px 10px; border-radius:999px; font-weight:700; font-size:12px;
+        background: rgba(255,255,255,.96); color:#0f172a; box-shadow: 0 1px 4px rgba(0,0,0,.18);
+        border:1px solid rgba(0,0,0,.08); white-space:nowrap; max-width:92%; overflow:hidden; text-overflow:ellipsis;
+    }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
+
+    /* Chip de legalidade pequeno para Tab3 (ao lado do nome) */
+    .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
+    .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
+    .rf-chip-danger{  color:#991b1b; background:#fee2e2; border-color:#fecaca }
+
+    /* Quantidade no canto inferior direito */
     .rf-qty-badge{ position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px; border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px); }
 
-    /* Botões */
-    div.stButton>button{ width:100%; min-width:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a; font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08); }
-    div.stButton>button:hover{ background:#f1f5f9 }
+    /* Densidade */
     .row-qty div.stButton>button{ padding:4px 8px; border-radius:10px; font-size:12px }
+    .rf-tile-name{ font-size:.86rem; font-weight:600; margin:.25rem 0 .15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center }
 
-    .rf-tile-name{ font-size:.86rem; font-weight:600; margin:.25rem 0 .15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-    .rf-sec-title{ font-size:1.0rem; font-weight:800; margin-top:.75rem }
-    .rf-spacer{ height:6px }
-
-    /* Reduz padding das columns para caber mais cartas sem estourar */
+    /* Columns padding */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
     @media (max-width:820px){  [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
@@ -198,20 +213,19 @@ st.title("\U0001F9D9 Romantic Format Tools")
 
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder (artes)"])
 
-# Helper: render HTML do card (Tab 1)
+# Helper: HTML de card c/ overlays (Tab1 e Tab3)
 
-def render_card_html(img_url: str, nome: str, status_text: str, status_type: str, qty: int) -> str:
-    cls = {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
+def html_card(img_url: str, overlay_html: str, qty: int) -> str:
     return f"""
-        <div class='rf-card'>
-          <img src='{img_url}' class='rf-img' alt='{nome}'/>
-          <div class='rf-badge-overlay {cls}'>{status_text}</div>
-          <div class='rf-qty-badge'>x{qty}</div>
-        </div>
+    <div class='rf-card'>
+      <img src='{img_url}' class='rf-img'/>
+      {overlay_html}
+      <div class='rf-qty-badge'>x{qty}</div>
+    </div>
     """
 
 # -------------------------
-# Tab 1 - Single Card Checker (v8)
+# Tab 1 - v8
 # -------------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
@@ -221,7 +235,7 @@ with tab1:
         for nome in sugestoes[:21]:
             data = fetch_card_data(nome)
             if data and data.get("image"):
-                status_text, status_type = check_legality(data["name"], data.get("sets", []))
+                status_text, status_type = check_legality(data["name"], data.get("sets", set()))
                 thumbs.append((data["name"], data["image"], status_text, status_type))
 
     if thumbs:
@@ -234,7 +248,8 @@ with tab1:
                 with cols[j]:
                     card_ph = st.empty()
                     qty_before = st.session_state.deck.get(nome, 0)
-                    card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
+                    badge = f"<div class='rf-badge-overlay {'rf-success' if status_type=='success' else ('rf-danger' if status_type=='danger' else 'rf-warning')}'>{status_text}</div>"
+                    card_ph.markdown(html_card(img, badge, qty_before), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
@@ -243,28 +258,28 @@ with tab1:
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
                         if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 1); clicked=True
+                            remove_card(nome, 1); clicked = True
                         if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
-                            add_card(nome, 1); clicked=True
+                            add_card(nome, 1); clicked = True
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
                         if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 4); clicked=True
+                            remove_card(nome, 4); clicked = True
                         if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                            add_card(nome, 4); clicked=True
+                            add_card(nome, 4); clicked = True
 
                     if clicked:
                         qty_after = st.session_state.deck.get(nome, 0)
-                        card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
+                        card_ph.markdown(html_card(img, badge, qty_after), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
-# Tab 2 - Decklist Checker
+# Tab 2 - Checker
 # -------------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
-    deck_input = st.text_area("Decklist", height=300)
+    deck_input = st.text_area("Decklist", height=280)
 
     def process_line(line: str):
         line = re.sub(r'#.*$', '', line).strip()
@@ -278,8 +293,8 @@ with tab2:
         card = fetch_card_data(name_guess)
         if not card:
             return (line, qty, "❌ Card not found or API error", "danger", None)
-        status_text, status_type = check_legality(card["name"], card["sets"])
-        return (card["name"], qty, status_text, status_type, card["sets"])
+        status_text, status_type = check_legality(card["name"], card.get("sets", set()))
+        return (card["name"], qty, status_text, status_type, card.get("sets", set()))
 
     if deck_input.strip():
         lines = [l for l in deck_input.splitlines()]
@@ -300,13 +315,13 @@ with tab2:
             st.success("Decklist adicionada ao Deckbuilder!")
 
 # -------------------------
-# Tab 3 - Deckbuilder (artes agrupadas + contador instantâneo)
+# Tab 3 - Deckbuilder com artes (nome e legalidade como badge; qty chip; contador instantâneo)
 # -------------------------
 with tab3:
     st.subheader("\U0001F9D9\u200d♂️ Seu Deck — artes agrupadas por tipo")
 
     cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
-    show_names = st.toggle("Mostrar nomes abaixo da arte", value=True)
+    show_names_text_below = st.toggle("Mostrar nomes abaixo da arte (além do chip)", value=False)
 
     total_cartas = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total_cartas}")
@@ -314,16 +329,17 @@ with tab3:
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        # Snapshot do deck para uso nas threads
         snap = dict(st.session_state.deck)
         names = sorted(snap.keys(), key=lambda x: x.lower())
 
         def load_one(nm: str):
             try:
                 data = fetch_card_data(nm)
-                return (nm, snap.get(nm, 0), data.get("type", "") if data else "", data.get("image") if data else None)
+                sets = data.get("sets", set()) if data else set()
+                status_text, status_type = check_legality(nm, sets)
+                return (nm, snap.get(nm, 0), data.get("type", "") if data else "", data.get("image") if data else None, status_text, status_type)
             except Exception:
-                return (nm, snap.get(nm, 0), "", None)
+                return (nm, snap.get(nm, 0), "", None, "", "warning")
 
         with st.spinner("Carregando artes..."):
             with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
@@ -341,32 +357,36 @@ with tab3:
             return "Outros"
 
         buckets = defaultdict(list)
-        for name, qty, tline, img in deck_items:
-            buckets[bucket(tline)].append((name, qty, tline, img))
+        for name, qty, tline, img, status_text, status_type in deck_items:
+            buckets[bucket(tline)].append((name, qty, tline, img, status_text, status_type))
 
-        order = ["Criaturas","Instantâneas","Feitiços","Artefatos","Encantamentos","Planeswalkers","Terrenos","Outros"]
-
-        for sec in order:
+        for sec in ["Criaturas","Instantâneas","Feitiços","Artefatos","Encantamentos","Planeswalkers","Terrenos","Outros"]:
             if sec not in buckets:
                 continue
             cards = buckets[sec]
-            st.markdown(f"<div class='rf-sec-title'>{sec} — {sum(q for _, q, _, _ in cards)}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='rf-sec-title'>{sec} — {sum(q for _, q, _, _, _, _ in cards)}</div>", unsafe_allow_html=True)
 
             for i in range(0, len(cards), cols_per_row):
                 row = cards[i:i+cols_per_row]
                 cols = st.columns(len(row))
-                for c, (name, qty_init, _, img) in zip(cols, row):
+                for c, (name, qty_init, _t, img, status_text, status_type) in zip(cols, row):
                     with c:
-                        if img: st.image(img, use_container_width=True)
-                        if show_names:
+                        # 1) Placeholder do tile (arte + overlays)
+                        tile_ph = st.empty()
+                        qty_now = st.session_state.deck.get(name, 0)
+                        # Badge de nome + legalidade (se não for legal)
+                        chip_class = "" if status_type=="success" else (" rf-chip-danger" if status_type=="danger" else " rf-chip-warning")
+                        legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if status_type=="danger" else ("Not Legal" if status_type=="warning" else "")) + "</span>" if status_type!="success" else ""
+                        name_badge = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
+                        tile_ph.markdown(html_card(img, name_badge, qty_now), unsafe_allow_html=True)
+
+                        # 2) Nome opcional abaixo (texto)
+                        if show_names_text_below:
                             st.markdown(f"<div class='rf-tile-name' title='{name}'>{name}</div>", unsafe_allow_html=True)
 
-                        # Controles com contador instantâneo
+                        # 3) Controles + contador instantâneo (re-render do tile)
                         st.markdown('<div class="row-qty">', unsafe_allow_html=True)
-                        g1, g2, g3, g4, labcol = st.columns([1,1,1,1,2])
-                        label_ph = labcol.empty()
-                        label_ph.markdown(f"**x{st.session_state.deck.get(name, 0)}**")
-
+                        g1, g2, g3, g4 = st.columns([1,1,1,1])
                         clicked = False
                         if g1.button("−1", key=f"db_m1_{sec}_{i}_{name}"):
                             remove_card(name, 1); clicked=True
@@ -376,10 +396,11 @@ with tab3:
                             remove_card(name, 4); clicked=True
                         if g4.button("+4", key=f"db_p4_{sec}_{i}_{name}"):
                             add_card(name, 4); clicked=True
+                        st.markdown('</div>', unsafe_allow_html=True)
 
                         if clicked:
-                            label_ph.markdown(f"**x{st.session_state.deck.get(name, 0)}**")
-                        st.markdown('</div>', unsafe_allow_html=True)
+                            qty_new = st.session_state.deck.get(name, 0)
+                            tile_ph.markdown(html_card(img, name_badge, qty_new), unsafe_allow_html=True)
 
             st.markdown("---")
 
