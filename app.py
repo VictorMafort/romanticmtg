@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v12 (Tab1 revertida + Deckbuilder com artes estilo Archidekt)
-- Tab 1: imagem com badge de legalidade e contador xN; controles abaixo (duas colunas) — atualização imediata
-- Tab 2: checker de lista básico
-- Tab 3 (NOVO): Deckbuilder com artes em grade, agrupadas por TIPO (Criaturas, Instantâneas, Feitiços, Artefatos, Encantamentos, Planeswalkers, Terrenos, Outros),
-  com controles compactos em cada tile e contador por seção, além do total do deck.
+Romantic Format Tools - v12.1 (fixes)
+- Fix 1: Aba 1 com cartas muito grandes -> limite de largura no wrapper (.rf-card {max-width})
+- Fix 2: Aba 3 AttributeError ao usar ThreadPool -> NUNCA acessar st.session_state dentro das threads;
+         snapshot do deck antes e uso dentro do worker; tratamento defensivo de exceções.
 """
 import re
 import time
@@ -178,19 +177,19 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", l
 st.markdown(
     """
     <style>
-    /* Imagem da carta com sombra/cantos */
+    /* Imagem base */
     [data-testid="stImage"] img, .rf-img{ display:block; width:100%; height:auto; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12); }
 
-    /* Overlays (Tab 1) */
-    .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    /* Card da Aba 1 com limite de largura para não ficar gigante em layout wide */
+    .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); max-width:320px; margin:0 auto; }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
+
     .rf-badge-overlay{ position:absolute; left:50%; transform:translateX(-50%); top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px; background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08); pointer-events:none; white-space:nowrap; }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
     .rf-qty-badge{ position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px; border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px); }
 
-    /* Botões pílula */
     div.stButton>button{ width:100%; min-width:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a; font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08); }
     div.stButton>button:hover{ background:#f1f5f9 }
 
@@ -199,7 +198,6 @@ st.markdown(
     .rf-sec-title{ font-size:1.0rem; font-weight:800; margin-top:.75rem }
     .rf-spacer{ height:6px }
 
-    /* Reduz padding lateral das columns para gridear melhor */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width: 1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
     @media (max-width: 820px){  [data-testid="column"]{ padding-left:.2rem;  padding-right:.2rem  } }
@@ -212,7 +210,7 @@ st.title("\U0001F9D9 Romantic Format Tools")
 
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder (artes)"])
 
-# Helper: render card HTML (Tab 1)
+# Helper (Tab 1)
 
 def render_card_html(img_url: str, nome: str, status_text: str, status_type: str, qty: int) -> str:
     cls = {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
@@ -225,7 +223,7 @@ def render_card_html(img_url: str, nome: str, status_text: str, status_type: str
     """
 
 # -------------------------
-# Tab 1 - Single Card Checker (revertido / estável)
+# Tab 1 - Single Card Checker (com limite de largura)
 # -------------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
@@ -274,7 +272,7 @@ with tab1:
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
-# Tab 2 - Decklist Checker (mesmo de antes)
+# Tab 2 - Decklist Checker (igual)
 # -------------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
@@ -314,13 +312,12 @@ with tab2:
             st.success("Decklist adicionada ao Deckbuilder!")
 
 # -------------------------
-# Tab 3 - Deckbuilder (ARTES agrupadas por tipo, estilo Archidekt)
+# Tab 3 - Deckbuilder (ARTES agrupadas por tipo) — com fix do snapshot de deck
 # -------------------------
 with tab3:
     st.subheader("\U0001F9D9\u200d♂️ Seu Deck — artes agrupadas por tipo")
 
-    # Parâmetros de visual
-    cols_per_row = st.slider("Colunas por linha", 4, 8, 6, help="Quantidade de colunas na grade de artes")
+    cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
     show_names = st.toggle("Mostrar nomes abaixo da arte", value=True)
 
     total_cartas = sum(st.session_state.deck.values())
@@ -329,34 +326,35 @@ with tab3:
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
     else:
-        # Carrega dados de todas as cartas do deck (paralelo)
-        names_list = sorted(list(st.session_state.deck.keys()), key=lambda x: x.lower())
+        # SNAPSHOT do deck (NÃO usar st.session_state dentro de threads)
+        current_deck = dict(st.session_state.deck)
+        names_list = sorted(list(current_deck.keys()), key=lambda x: x.lower())
 
-        def load_one(nm):
-            data = fetch_card_data(nm)
-            return (nm, st.session_state.deck.get(nm, 0), data.get("type", "") if data else "", data.get("image") if data else None)
+        def load_one(nm: str):
+            try:
+                data = fetch_card_data(nm)
+                qty = current_deck.get(nm, 0)
+                type_line = data.get("type", "") if data else ""
+                img = data.get("image") if data else None
+                return (nm, qty, type_line, img)
+            except Exception:
+                # Em caso de erro, evita quebrar a página
+                return (nm, current_deck.get(nm, 0), "", None)
 
         with st.spinner("Carregando artes..."):
-            with ThreadPoolExecutor(max_workers=10) as ex:
+            maxw = min(8, max(1, len(names_list)))
+            with ThreadPoolExecutor(max_workers=maxw) as ex:
                 deck_items = list(ex.map(load_one, names_list))
 
-        # Função de bucket por TIPO
         def bucket(type_line: str) -> str:
             tl = type_line or ""
-            if "Land" in tl:
-                return "Terrenos"
-            if "Creature" in tl:
-                return "Criaturas"
-            if "Instant" in tl:
-                return "Instantâneas"
-            if "Sorcery" in tl:
-                return "Feitiços"
-            if "Planeswalker" in tl:
-                return "Planeswalkers"
-            if "Enchantment" in tl:
-                return "Encantamentos"
-            if "Artifact" in tl:
-                return "Artefatos"
+            if "Land" in tl: return "Terrenos"
+            if "Creature" in tl: return "Criaturas"
+            if "Instant" in tl: return "Instantâneas"
+            if "Sorcery" in tl: return "Feitiços"
+            if "Planeswalker" in tl: return "Planeswalkers"
+            if "Enchantment" in tl: return "Encantamentos"
+            if "Artifact" in tl: return "Artefatos"
             return "Outros"
 
         buckets = defaultdict(list)
@@ -372,23 +370,14 @@ with tab3:
             sec_qty_sum = sum(q for _, q, _, _ in sec_list)
             st.markdown(f"<div class='rf-sec-title'>{sec} — {sec_qty_sum}</div>", unsafe_allow_html=True)
 
-            # Grade por linhas
             for i in range(0, len(sec_list), cols_per_row):
                 row = sec_list[i:i+cols_per_row]
                 cols = st.columns(len(row))
                 for c, (name, qty, type_line, img) in zip(cols, row):
                     with c:
-                        # Arte
-                        if img:
-                            st.image(img, use_container_width=True)
-                        else:
-                            st.empty()
-
-                        # Nome (opcional)
+                        if img: st.image(img, use_container_width=True)
                         if show_names:
                             st.markdown(f"<div class='rf-tile-name' title='{name}'>{name}</div>", unsafe_allow_html=True)
-
-                        # Controles compactos + contador à direita
                         st.markdown('<div class="row-qty">', unsafe_allow_html=True)
                         g1, g2, g3, g4, label = st.columns([1,1,1,1,2])
                         if g1.button("−1", key=f"db_m1_{sec}_{i}_{name}"):
@@ -404,7 +393,6 @@ with tab3:
 
             st.markdown("---")
 
-        # Exportar deck
         export_lines = [f"{qty}x {name}" for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
         export_text = "\n".join(export_lines)
         st.download_button("⬇️ Baixar deck (.txt)", data=export_text, file_name="deck.txt", mime="text/plain")
