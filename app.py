@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v6 (overlay + contador + ripple nos botões)
+Romantic Format Tools - v7 (overlay + contador com atualização imediata)
 - Badge de legalidade sobre a arte (offset para não cobrir o nome)
-- Contador de quantidade do deck no canto inferior direito
-- Efeito ripple nos botões ao adicionar/remover, sem deslocar layout
+- Contador de quantidade (xN) no canto inferior direito da imagem
+- **Sem ripple/flash**; contador atualiza imediatamente após clicar nos botões
 """
 import re
 import time
@@ -19,7 +19,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/1.0 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/1.1 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -174,20 +174,18 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
-# CSS (overlay + contador + ripple)
+# CSS (overlay + contador)
 st.markdown(
     """
     <style>
-    /* Card com overlay e contador */
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
 
     /* Badge de legalidade sobre a arte */
     .rf-badge-overlay{
         position:absolute; left:50%; transform:translateX(-50%);
-        top: 40px;
-        padding: 4px 10px; border-radius:999px; font-weight:700; font-size:12px;
-        background: rgba(255,255,255,.96); color:#0f172a;
+        top: 40px; padding: 4px 10px; border-radius:999px;
+        font-weight:700; font-size:12px; background: rgba(255,255,255,.96); color:#0f172a;
         box-shadow: 0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
         pointer-events:none; white-space:nowrap;
     }
@@ -198,38 +196,18 @@ st.markdown(
     /* Contador no canto inferior direito da arte */
     .rf-qty-badge{
         position:absolute; right:8px; bottom:8px;
-        background: rgba(0,0,0,.65); color:#fff;
-        padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px;
+        background: rgba(0,0,0,.65); color:#fff; padding:2px 8px;
+        border-radius:999px; font-weight:800; font-size:12px;
         border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
     }
 
-    /* Botões-pílula com ripple */
+    /* Botões-pílula */
     div.stButton>button{
-        position:relative; overflow:hidden; /* necessário para ripple */
         width:100%; min-width:0; padding:6px 10px; border-radius:999px;
         border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
         font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08);
-        transition: background .15s ease, box-shadow .15s ease;
     }
     div.stButton>button:hover{ background:#f1f5f9 }
-
-    /* Marcador zero-dimensões (não desloca layout) */
-    .rf-ripple-marker{ position:absolute; width:0; height:0; overflow:hidden; }
-
-    /* Pseudo-elemento ripple animado no botão seguinte ao marcador */
-    .rf-ripple-add + div button::after,
-    .rf-ripple-rem + div button::after{
-        content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(0);
-        width:180%; height:180%; border-radius:50%; pointer-events:none; opacity:.65;
-    }
-    .rf-ripple-add + div button::after{ background: radial-gradient(circle, rgba(34,197,94,.35) 0%, rgba(34,197,94,.25) 30%, rgba(34,197,94,0) 60%); animation: rfRippleGrow .6s ease-out forwards }
-    .rf-ripple-rem + div button::after{ background: radial-gradient(circle, rgba(239,68,68,.35) 0%, rgba(239,68,68,.25) 30%, rgba(239,68,68,0) 60%); animation: rfRippleGrow .6s ease-out forwards }
-
-    @keyframes rfRippleGrow{ from{ transform:translate(-50%,-50%) scale(0); opacity:.7 } to{ transform:translate(-50%,-50%) scale(1); opacity:0 } }
-
-    @media (prefers-reduced-motion: reduce){
-      .rf-ripple-add + div button::after, .rf-ripple-rem + div button::after{ animation:none }
-    }
 
     .rf-spacer{height:8px}
 
@@ -264,6 +242,18 @@ st.title("\U0001F9D9 Romantic Format Tools")
 
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder"])
 
+# Helper para renderizar o card com overlays
+
+def render_card_html(img_url: str, nome: str, status_text: str, status_type: str, qty: int) -> str:
+    cls = {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
+    return f"""
+        <div class='rf-card'>
+          <img src='{img_url}' class='rf-img' alt='{nome}'/>
+          <div class='rf-badge-overlay {cls}'>{status_text}</div>
+          <div class='rf-qty-badge'>x{qty}</div>
+        </div>
+    """
+
 # -------------------------
 # Tab 1 - Single Card Checker
 # -------------------------
@@ -278,9 +268,6 @@ with tab1:
                 status_text, status_type = check_legality(data["name"], data.get("sets", []))
                 thumbs.append((data["name"], data["image"], status_text, status_type))
 
-    def _badge_class(status_type: str) -> str:
-        return {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
-
     if thumbs:
         st.caption("\U0001F50E Sugestões:")
         cols_per_row = 3
@@ -288,52 +275,46 @@ with tab1:
             cols = st.columns(cols_per_row)
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
-                qty = st.session_state.deck.get(nome, 0)
                 with cols[j]:
-                    # Card com overlays (legalidade + contador)
-                    st.markdown(
-                        f"""
-                        <div class='rf-card'>
-                          <img src='{img}' class='rf-img' alt='{nome}'/>
-                          <div class='rf-badge-overlay {_badge_class(status_type)}'>{status_text}</div>
-                          <div class='rf-qty-badge'>x{qty}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    # Placeholder do card (vamos preencher DEPOIS de processar os botões para refletir a quantidade atual)
+                    card_ph = st.empty()
+
+                    # Quantidade antes de qualquer clique
+                    qty_before = st.session_state.deck.get(nome, 0)
+                    # Render inicial (para a primeira pintura da página)
+                    card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
+                    # Controles
                     left, mid, right = st.columns([2.2, 0.6, 2.2], gap="small")
 
+                    clicked = False
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
-                        with c1:
-                            if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-ripple-marker rf-ripple-rem"></span>', unsafe_allow_html=True)
-                            if st.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
-                                remove_card(nome, 1)
-                        with c2:
-                            if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-ripple-marker rf-ripple-add"></span>', unsafe_allow_html=True)
-                            if st.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
-                                add_card(nome, 1)
+                        if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 1)
+                            clicked = True
+                        if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
+                            add_card(nome, 1)
+                            clicked = True
 
                     with mid:
                         st.write("")
 
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
-                        with c3:
-                            if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-ripple-marker rf-ripple-rem"></span>', unsafe_allow_html=True)
-                            if st.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                                remove_card(nome, 4)
-                        with c4:
-                            if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-ripple-marker rf-ripple-add"></span>', unsafe_allow_html=True)
-                            if st.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                                add_card(nome, 4)
+                        if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 4)
+                            clicked = True
+                        if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
+                            add_card(nome, 4)
+                            clicked = True
+
+                    # Se houve clique, re-renderiza o card com a NOVA quantidade nesta mesma execução
+                    if clicked:
+                        qty_after = st.session_state.deck.get(nome, 0)
+                        card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
