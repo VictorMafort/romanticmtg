@@ -1,22 +1,23 @@
+
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.5 (Ajustes pedidos)
-- Aba 1: fixo em 3 colunas; acrescentada classe .rf-tab1 para medir largura natural do card
-- Aba 3: fixo em 5 colunas; cartas usam o mesmo tamanho máximo medido na Aba 1 (via --rf-card-max)
-- Botões: trocado o caractere "−" (U+2212) por "-" (ASCII) para garantir renderização do "+/-"
+Romantic Format Tools - v13.4 (Ajustes pedidos)
+- Aba 1: **removido** o slider de "cartas por linha" (fixo em 3 por linha)
+- Aba 3: mantém o mesmo tamanho máximo de carta da Aba 1 (controlado por --rf-card-max)
+- Botões: corrigido rótulo com símbolo de "+" onde faltava/estava escapado demais
+- Fix: barra de +/- da Aba 3 com melhor contraste/visibilidade e z-index
+- Fix: cálculo dinâmico de --rf-card-max para equivaler ao tamanho de 3 por linha
 """
 import re
 import time
 import urllib.parse
 from collections import deque, defaultdict
 from concurrent.futures import ThreadPoolExecutor
-
 import requests
 import streamlit as st
-
-# ---------------------
+# --------------------
 # Sessão HTTP + throttle
-# ---------------------
+# --------------------
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": "RomanticFormatTools/2.1 (+seu_email_ou_site)",
@@ -31,17 +32,17 @@ def throttle():
         if elapsed < 1.0:
             time.sleep(1.0 - elapsed)
 
-# ---------------------
+# --------------------
 # Config & listas
-# ---------------------
+# --------------------
 allowed_sets = {
     "8ED","MRD","DST","5DN","CHK","BOK","SOK","9ED","RAV","GPT","DIS","CSP","TSP","TSB","PLC","FUT","10E","LRW","MOR","SHM","EVE","ALA","CON","ARB","M10","ZEN","WWK","ROE","M11","SOM","MBS","NPH","M12","ISD","DKA","AVR","M13",
 }
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
-# ---------------------
+# --------------------
 # Utilidades
-# ---------------------
+# --------------------
 
 def buscar_sugestoes(query: str):
     q = query.strip()
@@ -100,8 +101,8 @@ def fetch_card_data(card_name):
             for c in j.get("data", []):
                 if "Token" not in c.get("type_line", ""):
                     set_code = c.get("set", "").upper(); all_sets.add(set_code)
-                    if set_code in allowed_sets:
-                        next_page = None; break
+                if set_code in allowed_sets:
+                    next_page = None; break
             else:
                 next_page = j.get("next_page")
         except Exception:
@@ -118,9 +119,9 @@ def check_legality(name, sets):
     if sets & allowed_sets: return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
-# ---------------------
+# --------------------
 # Estado do deck
-# ---------------------
+# --------------------
 if "deck" not in st.session_state: st.session_state.deck = {}
 if "last_change" not in st.session_state: st.session_state.last_change = None
 if "last_action" not in st.session_state: st.session_state.last_action = None
@@ -136,27 +137,31 @@ def remove_card(card_name, qty=1):
             del st.session_state.deck[card_name]
     st.session_state.last_change = card_name; st.session_state.last_action = "remove"
 
-# ---------------------
+# --------------------
 # App + CSS
-# ---------------------
+# --------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
 st.markdown(
     """
     <style>
     :root{
-      /* Tamanho máximo do card (será atualizado dinamicamente pela Aba 1) */
-      --rf-card-max: 300px;
+      /* Largura aproximada do container central do Streamlit */
+      --rf-container-w: min(1200px, calc(100vw - 6rem));
+      /* Gap aproximado entre colunas e padding interno */
+      --rf-col-gap: 1.2rem;
+      --rf-col-pad: .35rem;
+      /* Máx = largura de 1 carta quando existem 3 por linha */
+      --rf-card-max: calc(
+        (var(--rf-container-w) - (2 * var(--rf-col-pad) * 3) - (2 * var(--rf-col-gap))) / 3
+      );
+      /* Segurança no mobile */
+      --rf-card-max: clamp(220px, var(--rf-card-max), 44vw);
     }
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
-
-    /* Cartas com tamanho limitado pelo teto calculado */
+    /* Mantém o tile sob controle (não crescer além do “3 por linha”) */
     .rf-fixed{ max-width: var(--rf-card-max); margin:0 auto; }
-
-    /* Aba 1: cartas ocupam 100% da coluna (sem teto) para medição */
-    .rf-tab1{ width:100%; max-width:none; margin:0 auto; }
-
     /* Chips/badges */
     .rf-name-badge{
       position:absolute; left:50%; transform:translateX(-50%);
@@ -168,16 +173,18 @@ st.markdown(
     .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
     .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
     .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
-
-    /* Barra -/+ "dentro" da arte (Aba 3) */
-    .rf-inart-belt{ max-width: var(--rf-card-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:3; }
-    .rf-inart-belt div.stButton>button{
-      width:auto; min-width:40px; height:40px; padding:0 10px; border-radius:999px; font-size:18px; font-weight:800;
-      background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.1); box-shadow:0 1px 4px rgba(0,0,0,.18);
-      color:#111;
+    /* Barra -/+ "sobre" a arte (Aba 3) */
+    .rf-inart-belt{
+      max-width: var(--rf-card-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20;
     }
-    .rf-inart-belt div.stButton>button:hover{ background:#eef2f7 }
-
+    /* Estiliza botões que aparecem DEPOIS da belt no fluxo */
+    .rf-inart-belt + div [data-testid="column"] div.stButton>button,
+    .rf-inart-belt ~ div [data-testid="column"] div.stButton>button{
+      width:auto; min-width:40px; height:40px; padding:0 14px; border-radius:999px; font-size:18px; font-weight:800; line-height:1; display:inline-flex; align-items:center; justify-content:center;
+      color:#0f172a !important; background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.10); box-shadow:0 1px 4px rgba(0,0,0,.18);
+    }
+    .rf-inart-belt + div [data-testid="column"] div.stButton>button:hover,
+    .rf-inart-belt ~ div [data-testid="column"] div.stButton>button:hover{ background:#eef2f7 }
     /* columns padding geral */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
@@ -204,25 +211,21 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "") ->
     </div>
     """
 
-# ---------------------------------------------------------
+# --------------------
 # Tab 1 — Sugestões com -1/+1 e -4/+4 (colunas FIXAS em 3)
-# ---------------------------------------------------------
+# --------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
     COLS_TAB1 = 3  # <- fixo, sem slider
     thumbs = []
-
     if query.strip():
         for nm in buscar_sugestoes(query.strip())[:21]:
             d = fetch_card_data(nm)
             if d and d.get("image"):
                 status_text, status_type = check_legality(d["name"], d.get("sets", set()))
                 thumbs.append((d["name"], d["image"], status_text, status_type))
-
     if thumbs:
         st.caption("🔎 Sugestões:")
-        # Zona usada para medir a largura real de um card na Aba 1
-        st.markdown("<div id='rf-tab1-zone'>", unsafe_allow_html=True)
         for i in range(0, len(thumbs), COLS_TAB1):
             cols = st.columns(min(COLS_TAB1, len(thumbs) - i))
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
@@ -230,47 +233,21 @@ with tab1:
                     ph = st.empty(); qty = st.session_state.deck.get(name, 0)
                     badge_cls = "rf-success" if status_type=="success" else ("rf-danger" if status_type=="danger" else "rf-warning")
                     badge = f"<div class='rf-name-badge {badge_cls}'>{status_text}</div>"
-                    # Usa .rf-tab1 (sem teto) para medir largura natural
-                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-tab1"), unsafe_allow_html=True)
-
+                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
                     bcols = st.columns([1,1,1,1], gap="small")
                     clicked=False
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-                    if bcols[0].button("-4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
-                    if bcols[1].button("-1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
+                    if bcols[0].button("−4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
+                    if bcols[1].button("−1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
                     if bcols[2].button("+1", key=f"{base_key}_p1"): add_card(name,1); clicked=True
                     if bcols[3].button("+4", key=f"{base_key}_p4"): add_card(name,4); clicked=True
                     if clicked:
                         qty2 = st.session_state.deck.get(name,0)
-                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-tab1"), unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
 
-        # Script que mede a largura do primeiro .rf-card dentro de #rf-tab1-zone
-        st.markdown(
-            """
-            <script>
-            (function(){
-              function setMaxFromTab1(){
-                const zone = document.getElementById('rf-tab1-zone');
-                if(!zone) return;
-                const card = zone.querySelector('.rf-card');
-                if(!card) return;
-                const w = Math.round(card.getBoundingClientRect().width);
-                if(w && w > 0){
-                  document.documentElement.style.setProperty('--rf-card-max', w + 'px');
-                }
-              }
-              setMaxFromTab1();
-              new ResizeObserver(setMaxFromTab1).observe(document.body);
-            })();
-            </script>
-            """,
-            unsafe_allow_html=True,
-        )
-
-# -----------------
+# --------------------
 # Tab 2 (igual)
-# -----------------
+# --------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=260)
@@ -302,14 +279,12 @@ with tab2:
                     st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
             st.success("Decklist adicionada ao Deckbuilder!")
 
-# -----------------------------------------------------------------
+# --------------------
 # Tab 3 — Artes por tipo + in-image +/- + contador instantâneo
-#      — FIXO em 5 colunas por linha
-# -----------------------------------------------------------------
+# --------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
-    cols_per_row = 5  # <-- fixo em 5, sem slider
-
+    cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
     total = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total}")
 
@@ -352,6 +327,7 @@ with tab3:
             if sec not in buckets: continue
             group = buckets[sec]
             st.markdown(f"<div class='rf-sec-title'>{sec} — {sum(q for _, q, _, _, _, _ in group)}</div>", unsafe_allow_html=True)
+
             for i in range(0, len(group), cols_per_row):
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
@@ -360,20 +336,18 @@ with tab3:
                         card_ph = st.empty()
                         qty = st.session_state.deck.get(name, 0)
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
-                        legal_html = (f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>") if s_type!="success" else ""
+                        legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
-                        # Aqui usamos o teto de largura
                         card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
 
-                        # Barra -/+ posicionada sobre a arte
-                        st.markdown("<div class='rf-inart-belt'>", unsafe_allow_html=True)
-                        minus_c, plus_c = st.columns([1,1])
+                        # Barra +/-: marcador visual para largura/posição; botões vêm depois (como exige o Streamlit)
+                        st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
+                        minus_c, plus_c = st.columns([1, 1], gap="small")
                         clicked = False
-                        if minus_c.button("-", key=f"b_m1_{sec}_{i}_{name}"):
+                        if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
                             remove_card(name, 1); clicked=True
-                        if plus_c.button("+", key=f"b_p1_{sec}_{i}_{name}"):
+                        if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
                             add_card(name, 1); clicked=True
-                        st.markdown("</div>", unsafe_allow_html=True)
 
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
