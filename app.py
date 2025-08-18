@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v17.0
+Romantic Format Tools — FINAL v18.0
 Autor: Victor + Copilot
 
-Mudanças principais nesta versão (v17):
-- 🔁 Correção do “delay” ao adicionar/subtrair cartas nas Abas 1 e 3, usando callbacks com `on_click` e `st.rerun()`.
-- 🗜️ Removido o slider de colunas na Aba 3; as cartas nunca passam do tamanho MÁXIMO equivalente a 3 colunas (via CSS `--rf-card3-max`).
-- 🍩 Donuts (Altair): rótulo posicionado no ângulo central real da fatia (midAngle) + legenda com contagens por cor.
-- 🖼️ Mantidas todas as features de v14 (DFC image fix, cache_data, análise de subtipos, etc.).
+Mudanças nesta versão (v18):
+- Remove o uso de st.rerun() em callbacks (evita no-op). 
+- Implementa atualização IMEDIATA de quantidades processando os botões (+/−) ANTES do render das cartas.
+- Mantém: slider removido na Aba 3; teto visual de 3 colunas via CSS; donuts com midAngle + legenda com contagens.
 """
 
 import re
@@ -28,16 +27,6 @@ if 'last_change' not in st.session_state:
     st.session_state.last_change = None
 if 'last_action' not in st.session_state:
     st.session_state.last_action = None
-
-# ==== Helpers de estado (callbacks imediatos) ====
-def _deck_apply(name: str, delta: int):
-    q = st.session_state.deck.get(name, 0) + delta
-    if q <= 0:
-        st.session_state.deck.pop(name, None)
-    else:
-        st.session_state.deck[name] = q
-    # Força rerun já com o valor atualizado
-    st.rerun()
 
 # ===== Sessão HTTP + throttle =====
 SESSION = requests.Session()
@@ -91,12 +80,7 @@ def buscar_sugestoes(query: str):
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
-    """Busca dados via Scryfall.
-    - Corrige DFC: se não houver `image_uris` no topo, usa `card_faces[0].image_uris`.
-    - Limita sets (allowed_sets) para checar legalidade.
-    - Retry leve + throttle.
-    Retorna dict com: name, sets, image, type, cmc, mana_cost, colors, color_identity, produced_mana
-    """
+    """Busca dados via Scryfall (com fix DFC) e retorna dict enxuto."""
     safe_name = card_name.strip()
     url_named = f"https://api.scryfall.com/cards/named?fuzzy={urllib.parse.quote(safe_name)}"
     resp = _get(url_named)
@@ -106,7 +90,6 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
     if "prints_search_uri" not in data:
         return None
 
-    # imagem (inclui DFC)
     def pick_image(card: dict):
         img = (card.get("image_uris", {}) or {}).get("normal") or (card.get("image_uris", {}) or {}).get("small")
         if img:
@@ -121,7 +104,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
 
     base_img = pick_image(data)
 
-    # quick scan: restringe aos sets permitidos
+    # quick scan
     all_sets = set()
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     q_str = f'!"{safe_name}" e:({set_query})'
@@ -148,7 +131,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
                 "produced_mana": data.get("produced_mana"),
             }
 
-    # fallback: varre prints
+    # fallback prints
     next_page = data["prints_search_uri"]
     while next_page:
         p = _get(next_page)
@@ -257,7 +240,7 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
     """
 
 # =====================================================================
-# TAB 1 — Sugestões (chip de legalidade + tamanho capado)
+# TAB 1 — Sugestões
 # =====================================================================
 with tab1:
     import html as _html
@@ -279,24 +262,28 @@ with tab1:
                 with cols[j]:
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
 
-                    # Botões com callbacks (processa + rerun imediato)
+                    # 1) PROCESSA BOTÕES PRIMEIRO (sem callbacks)
                     bcols = st.columns([1,1,1,1,1,1], gap="small")
-                    bcols[1].button("−4", key=f"{base_key}_m4", on_click=_deck_apply, args=(name, -4))
-                    bcols[2].button("−1", key=f"{base_key}_m1", on_click=_deck_apply, args=(name, -1))
-                    bcols[3].button("+1", key=f"{base_key}_p1", on_click=_deck_apply, args=(name, +1))
-                    bcols[4].button("+4", key=f"{base_key}_p4", on_click=_deck_apply, args=(name, +4))
+                    if bcols[1].button("−4", key=f"{base_key}_m4"):
+                        st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0) - 4)
+                        if st.session_state.deck.get(name,0) == 0:
+                            st.session_state.deck.pop(name, None)
+                    if bcols[2].button("−1", key=f"{base_key}_m1"):
+                        st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0) - 1)
+                        if st.session_state.deck.get(name,0) == 0:
+                            st.session_state.deck.pop(name, None)
+                    if bcols[3].button("+1", key=f"{base_key}_p1"):
+                        st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
+                    if bcols[4].button("+4", key=f"{base_key}_p4"):
+                        st.session_state.deck[name] = st.session_state.deck.get(name,0) + 4
 
-                    # Render da carta com estado atual
+                    # 2) RENDERIZA DEPOIS (mostra qty já atualizado neste run)
                     qty = st.session_state.deck.get(name, 0)
                     label = "Banned" if status_type == "danger" else ("Not Legal" if status_type == "warning" else "Legal")
                     chip_class = "" if status_type == "success" else (" rf-chip-danger" if status_type == "danger" else " rf-chip-warning")
                     legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
                     badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
-
-                    st.markdown(
-                        html_card(img, badge, qty, extra_cls="rf-fixed1", overlimit=False),
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1", overlimit=False), unsafe_allow_html=True)
 
 # =====================================================================
 # TAB 2 — Decklist Checker
@@ -399,13 +386,24 @@ with tab3:
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
                 for col, (name, _q0, _t, img, s_text, s_type) in zip(cols, row):
-                    qty = st.session_state.deck.get(name, 0)
-                    if qty <= 0:
-                        continue
-                    if not img:
-                        skipped += 1
-                        continue
+                    # 1) PROCESSA BOTÕES PRIMEIRO (sem callbacks)
                     with col:
+                        mcol, pcol = st.columns([1, 1])
+                        if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                            new_q = max(0, st.session_state.deck.get(name,0) - 1)
+                            if new_q == 0:
+                                st.session_state.deck.pop(name, None)
+                            else:
+                                st.session_state.deck[name] = new_q
+                        if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                            st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
+
+                        # 2) RENDERIZA CARTA COM ESTADO ATUAL
+                        qty = st.session_state.deck.get(name, 0)
+                        if qty <= 0 or not img:
+                            if not img:
+                                skipped += 1
+                            continue
                         chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
                         legal_html = (
                             f"<span class='rf-legal-chip{chip_class}'>" +
@@ -413,20 +411,14 @@ with tab3:
                             "</span>"
                         ) if s_type != "success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
-                        st.markdown(
-                            html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)),
-                            unsafe_allow_html=True
-                        )
+                        st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
-                        mcol, pcol = st.columns([1, 1])
-                        mcol.button("➖", key=f"m1_{sec}_{i}_{name}", on_click=_deck_apply, args=(name, -1))
-                        pcol.button("➕", key=f"p1_{sec}_{i}_{name}", on_click=_deck_apply, args=(name, +1))
             st.markdown("---")
         if skipped:
             st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
 
 # =====================================================================
-# TAB 4 — Análise (donuts vetorizados, ícones e %)
+# TAB 4 — Análise (donuts)
 # =====================================================================
 with tab4:
     st.subheader("📊 Análise do Deck")
@@ -447,7 +439,7 @@ with tab4:
                     'produced_mana': (d.get('produced_mana') if d else []),
                 }
             except Exception:
-                return {'name': nm, 'qty': snap.get(nm, 0), 'type_line': '', 'color_identity': [], 'produced_mana': []}
+                return {'name': nm, 'qty': snap.get(nm,0), 'type_line': '', 'color_identity': [], 'produced_mana': []}
 
         with st.spinner("Calculando estatísticas..."):
             with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
@@ -496,7 +488,6 @@ with tab4:
             if dff.empty:
                 return alt.Chart(pd.DataFrame({'v':[1]})).mark_text(text='(vazio)').properties(height=200)
 
-            # Legenda com contagens
             legend = alt.Legend(title=title)
             if legend_counts is not None:
                 parts = []
@@ -533,25 +524,23 @@ with tab4:
 
             return (arc + txt).properties(height=320)
 
-        # 🎨 Distribuição de cores (identidade)
+        # 🎨 Distribuição de cores
         st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
         ci_df = df[['qty','color_identity']].copy()
         ci_df['color_identity'] = ci_df['color_identity'].apply(lambda x: x if isinstance(x, list) else [])
         ex = ci_df.explode('color_identity')
         s_ci = ex.groupby('color_identity', dropna=True)['qty'].sum(min_count=1)
         dist_vals = {k: int(s_ci.get(k, 0)) for k in letters}
-        # colorless (sem identidade)
         colorless_qty = int(df[df['color_identity'].apply(lambda x: not bool(x))]['qty'].sum())
         dist_vals['C'] += colorless_qty
         dist_df = build_donut_df(dist_vals, val_name='Cópias')
         st.altair_chart(donut_altair(dist_df, 'Cor', 'Cópias', legend_counts=dist_vals), use_container_width=True)
         st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; por isso as % podem somar >100%.")
 
-        # ⛲ Fontes de mana por cor
+        # ⛲ Fontes de mana
         st.markdown("### ⛲ Fontes de mana por cor")
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, list) and len(v) > 0)
         sources_df = df.loc[is_source, ['qty','type_line','produced_mana']].copy()
-        # Todas
         if not sources_df.empty:
             ex_all = sources_df.explode('produced_mana')
             ex_all = ex_all[ex_all['produced_mana'].isin(letters)]
@@ -559,9 +548,8 @@ with tab4:
             vals_all = {k: int(s_all.get(k, 0)) for k in letters}
         else:
             vals_all = {k: 0 for k in letters}
-        # Somente terrenos
         if not sources_df.empty:
-            land_df = sources_df[sources_df['type_line'].apply(lambda t: isinstance(t, str) and ('Land' in t))][['qty','produced_mana']]
+            land_df = sources_df[sources_df['type_line'].apply(lambda t: isinstance(t,str) and ('Land' in t))][['qty','produced_mana']]
             if not land_df.empty:
                 ex_land = land_df.explode('produced_mana')
                 ex_land = ex_land[ex_land['produced_mana'].isin(letters)]
