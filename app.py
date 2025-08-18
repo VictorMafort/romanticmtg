@@ -1,12 +1,15 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.5.1
+Romantic Format Tools — FINAL v18.5.2
 Autor: Victor + Copilot
 
-Hotfix (v18.5.1):
-- Corrige NameError na Aba 1: adiciona a função `buscar_sugestoes` que faltou na v18.5.
-- Mantém: cliques rápidos na Aba 3 (placeholder re-render) e análise preguiçosa na Aba 4.
+Mudanças nesta versão (v18.5.2):
+- **Legalidade corrigida**: reintroduz fallback de varredura de prints (via `prints_search_uri`) caso a consulta rápida
+  `search?q=!"Nome" e:(SETS)` não retorne resultados, evitando falso "Not Legal".
+- `check_legality` trata `sets` vazio como **"Unknown" (warning)** ao invés de marcar "Not Legal".
+- Mantém: Aba 3 com **re-render local** via `st.empty()` (cliques rápidos), **símbolos de mana** no badge, e Aba 4 com
+  **análise preguiçosa** (toggle para calcular sob demanda), além do **fix do Altair** nos donuts.
 """
 import re
 import time
@@ -42,7 +45,7 @@ allowed_sets = {
 }
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
-# ===== Estado do app =====
+# ===== Estado =====
 if 'deck' not in st.session_state: st.session_state.deck = {}
 if 'last_change' not in st.session_state: st.session_state.last_change = None
 if 'last_action' not in st.session_state: st.session_state.last_action = None
@@ -87,7 +90,8 @@ def fetch_card_data(card_name, _salt=','.join(sorted(allowed_sets))):
         return None
 
     base_img = pick_image(data)
-    # quick scan de sets permitidos
+
+    # ==== 1) quick scan (exato pelo nome dentro dos sets permitidos)
     all_sets = set()
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     q_str = f'!"{safe_name}" e:({set_query})'
@@ -101,6 +105,35 @@ def fetch_card_data(card_name, _salt=','.join(sorted(allowed_sets))):
                 sc = (c.get("set") or "").upper()
                 if sc:
                     all_sets.add(sc)
+            return {
+                "name": data.get("name", ""),
+                "sets": all_sets,
+                "image": base_img,
+                "type": data.get("type_line", ""),
+                "cmc": data.get("cmc"),
+                "mana_cost": data.get("mana_cost"),
+                "colors": data.get("colors"),
+                "color_identity": data.get("color_identity"),
+                "produced_mana": data.get("produced_mana"),
+            }
+    except Exception:
+        pass
+
+    # ==== 2) fallback: varredura de prints (paginada)
+    next_page = data["prints_search_uri"]
+    try:
+        while next_page:
+            throttle(); p = SESSION.get(next_page, timeout=8)
+            if not p or p.status_code != 200:
+                break
+            j = p.json()
+            for c in j.get("data", []):
+                if "Token" in (c.get("type_line") or ""):
+                    continue
+                sc = (c.get("set") or "").upper()
+                if sc:
+                    all_sets.add(sc)
+            next_page = j.get("next_page")
     except Exception:
         pass
 
@@ -116,11 +149,17 @@ def fetch_card_data(card_name, _salt=','.join(sorted(allowed_sets))):
         "produced_mana": data.get("produced_mana"),
     }
 
+# ===== Legalidade =====
 def check_legality(name, sets):
-    if name in ban_list: return "❌ Banned", "danger"
-    if sets & allowed_sets: return "✅ Legal", "success"
+    if name in ban_list:
+        return "❌ Banned", "danger"
+    if not sets:
+        return "⚠️ Unknown", "warning"
+    if sets & allowed_sets:
+        return "✅ Legal", "success"
     return "⚠️ Not Legal", "warning"
 
+# ===== Ações deck =====
 def add_card(card_name, qty=1):
     st.session_state.deck[card_name] = st.session_state.deck.get(card_name, 0) + qty
     st.session_state.last_change = card_name; st.session_state.last_action = "add"
@@ -145,10 +184,8 @@ st.markdown(
     :root{
       --rf-container-w: min(1200px, calc(100vw - 6rem));
       --rf-col-gap: 1.1rem; --rf-col-pad: .35rem;
-      /* TAB 1 cap (3 por linha aprox.) */
-      --rf-card1-max: 300px;
-      /* TAB 3 cap fixo por card */
-      --rf-card3-max: 300px;
+      --rf-card1-max: 300px;   /* Aba 1 */
+      --rf-card3-max: 300px;   /* Aba 3 */
       --rf-overlimit: #ef4444;
     }
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); background:#0b0b0b08; }
