@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.4 (Ajustes pedidos)
-- Aba 1: **removido** o slider de "cartas por linha" (fixo em 3 por linha)
-- Aba 3: mantém o mesmo tamanho máximo de carta da Aba 1 (controlado por --rf-card-max)
-- Botões: corrigido rótulo com símbolo de "+" onde faltava/estava escapado demais
+Romantic Format Tools - v13.5 (Ajustes pedidos)
+- Aba 1: fixo em 3 colunas; acrescentada classe .rf-tab1 para medir largura natural do card
+- Aba 3: fixo em 5 colunas; cartas usam o mesmo tamanho máximo medido na Aba 1 (via --rf-card-max)
+- Botões: trocado o caractere "−" (U+2212) por "-" (ASCII) para garantir renderização do "+/-"
 """
 import re
 import time
 import urllib.parse
 from collections import deque, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+
 import requests
 import streamlit as st
 
@@ -81,7 +82,7 @@ def fetch_card_data(card_name):
             return {
                 "name": data.get("name", ""),
                 "sets": all_sets,
-                # Preferir 'normal' (médio/boa qualidade) com fallback 'small'
+                # Preferir 'normal' com fallback 'small'
                 "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
                 "type": data.get("type_line", ""),
             }
@@ -144,13 +145,18 @@ st.markdown(
     """
     <style>
     :root{
-      /* tamanho máximo do “tile” (médio): ajuste aqui se quiser 280px/320px */
+      /* Tamanho máximo do card (será atualizado dinamicamente pela Aba 1) */
       --rf-card-max: 300px;
     }
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
-    /* Tamanho fixo do tile para não ficar gigante com poucas colunas */
+
+    /* Cartas com tamanho limitado pelo teto calculado */
     .rf-fixed{ max-width: var(--rf-card-max); margin:0 auto; }
+
+    /* Aba 1: cartas ocupam 100% da coluna (sem teto) para medição */
+    .rf-tab1{ width:100%; max-width:none; margin:0 auto; }
+
     /* Chips/badges */
     .rf-name-badge{
       position:absolute; left:50%; transform:translateX(-50%);
@@ -162,13 +168,16 @@ st.markdown(
     .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
     .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
     .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
+
     /* Barra -/+ "dentro" da arte (Aba 3) */
     .rf-inart-belt{ max-width: var(--rf-card-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:3; }
     .rf-inart-belt div.stButton>button{
       width:auto; min-width:40px; height:40px; padding:0 10px; border-radius:999px; font-size:18px; font-weight:800;
       background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.1); box-shadow:0 1px 4px rgba(0,0,0,.18);
+      color:#111;
     }
     .rf-inart-belt div.stButton>button:hover{ background:#eef2f7 }
+
     /* columns padding geral */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
@@ -179,9 +188,11 @@ st.markdown(
 )
 
 st.title("🧙 Romantic Format Tools")
+
 tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)"])
 
 # Helper HTML do card (permite classe extra)
+
 def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "") -> str:
     cls = f"rf-card {extra_cls}".strip()
     img_src = img_url or ""
@@ -193,14 +204,14 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "") ->
     </div>
     """
 
-# ---------------------------------------------------------------
+# ---------------------------------------------------------
 # Tab 1 — Sugestões com -1/+1 e -4/+4 (colunas FIXAS em 3)
-# ---------------------------------------------------------------
+# ---------------------------------------------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
     COLS_TAB1 = 3  # <- fixo, sem slider
-
     thumbs = []
+
     if query.strip():
         for nm in buscar_sugestoes(query.strip())[:21]:
             d = fetch_card_data(nm)
@@ -210,6 +221,8 @@ with tab1:
 
     if thumbs:
         st.caption("🔎 Sugestões:")
+        # Zona usada para medir a largura real de um card na Aba 1
+        st.markdown("<div id='rf-tab1-zone'>", unsafe_allow_html=True)
         for i in range(0, len(thumbs), COLS_TAB1):
             cols = st.columns(min(COLS_TAB1, len(thumbs) - i))
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
@@ -217,22 +230,47 @@ with tab1:
                     ph = st.empty(); qty = st.session_state.deck.get(name, 0)
                     badge_cls = "rf-success" if status_type=="success" else ("rf-danger" if status_type=="danger" else "rf-warning")
                     badge = f"<div class='rf-name-badge {badge_cls}'>{status_text}</div>"
-                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                    # Usa .rf-tab1 (sem teto) para medir largura natural
+                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-tab1"), unsafe_allow_html=True)
 
                     bcols = st.columns([1,1,1,1], gap="small")
                     clicked=False
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-                    if bcols[0].button("−4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
-                    if bcols[1].button("−1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
+                    if bcols[0].button("-4", key=f"{base_key}_m4"): remove_card(name,4); clicked=True
+                    if bcols[1].button("-1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
                     if bcols[2].button("+1", key=f"{base_key}_p1"): add_card(name,1); clicked=True
                     if bcols[3].button("+4", key=f"{base_key}_p4"): add_card(name,4); clicked=True
                     if clicked:
                         qty2 = st.session_state.deck.get(name,0)
-                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-tab1"), unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------------------
+        # Script que mede a largura do primeiro .rf-card dentro de #rf-tab1-zone
+        st.markdown(
+            """
+            <script>
+            (function(){
+              function setMaxFromTab1(){
+                const zone = document.getElementById('rf-tab1-zone');
+                if(!zone) return;
+                const card = zone.querySelector('.rf-card');
+                if(!card) return;
+                const w = Math.round(card.getBoundingClientRect().width);
+                if(w && w > 0){
+                  document.documentElement.style.setProperty('--rf-card-max', w + 'px');
+                }
+              }
+              setMaxFromTab1();
+              new ResizeObserver(setMaxFromTab1).observe(document.body);
+            })();
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+
+# -----------------
 # Tab 2 (igual)
-# ---------------------
+# -----------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
     deck_input = st.text_area("Decklist", height=260)
@@ -253,7 +291,7 @@ with tab2:
         with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as ex:
                 results = list(ex.map(process_line, lines))
-            results = [r for r in results if r]
+        results = [r for r in results if r]
         st.subheader("📋 Resultados:")
         for name, qty, status_text, status_type, _ in results:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
@@ -264,12 +302,14 @@ with tab2:
                     st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
             st.success("Decklist adicionada ao Deckbuilder!")
 
-# ---------------------------------------------------------------
+# -----------------------------------------------------------------
 # Tab 3 — Artes por tipo + in-image +/- + contador instantâneo
-# ---------------------------------------------------------------
+#      — FIXO em 5 colunas por linha
+# -----------------------------------------------------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
-    cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
+    cols_per_row = 5  # <-- fixo em 5, sem slider
+
     total = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total}")
 
@@ -320,15 +360,16 @@ with tab3:
                         card_ph = st.empty()
                         qty = st.session_state.deck.get(name, 0)
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
-                        legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
+                        legal_html = (f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>") if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
+                        # Aqui usamos o teto de largura
                         card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
 
-                        # Barra -/+ posicionada sobre a arte (margem negativa)
+                        # Barra -/+ posicionada sobre a arte
                         st.markdown("<div class='rf-inart-belt'>", unsafe_allow_html=True)
                         minus_c, plus_c = st.columns([1,1])
                         clicked = False
-                        if minus_c.button("−", key=f"b_m1_{sec}_{i}_{name}"):
+                        if minus_c.button("-", key=f"b_m1_{sec}_{i}_{name}"):
                             remove_card(name, 1); clicked=True
                         if plus_c.button("+", key=f"b_p1_{sec}_{i}_{name}"):
                             add_card(name, 1); clicked=True
@@ -337,7 +378,7 @@ with tab3:
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
                             card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
-            st.markdown("---")
+                st.markdown("---")
 
         # Export
         lines = [f"{q}x {n}" for n, q in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
