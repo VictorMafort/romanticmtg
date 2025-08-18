@@ -67,12 +67,14 @@ def buscar_sugestoes(query: str):
     return []
 
 @st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
     safe_name = urllib.parse.quote(card_name)
     url = f"https://api.scryfall.com/cards/named?fuzzy={safe_name}"
     try:
-        resp = requests.get(url, timeout=8)
-    except:
+        throttle()
+        resp = SESSION.get(url, timeout=8)
+    except Exception:
         return None
     if resp.status_code != 200:
         return None
@@ -84,34 +86,36 @@ def fetch_card_data(card_name):
 
     # Busca rápida limitada aos sets permitidos
     set_query = " OR ".join(s.lower() for s in allowed_sets)
-    quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe_name}\"+e:({set_query})"
+    quick_url = f"https://api.scryfall.com/cards/search?q=!%22{safe_name}%22+e:({set_query})"
     try:
-        quick_resp = requests.get(quick_url, timeout=8)
-        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards",0) > 0:
+        throttle()
+        quick_resp = SESSION.get(quick_url, timeout=8)
+        if quick_resp.status_code == 200 and quick_resp.json().get("total_cards", 0) > 0:
             for c in quick_resp.json().get("data", []):
-                if "Token" not in c.get("type_line",""):
+                if "Token" not in c.get("type_line", ""):
                     all_sets.add(c["set"].upper())
             return {
-                "name": data.get("name",""),
+                "name": data.get("name", ""),
                 "sets": all_sets,
-                "image": data.get("image_uris",{}).get("normal"),
-                "type": data.get("type_line",""),
-                "mana": data.get("mana_cost",""),
-                "oracle": data.get("oracle_text","")
+                "image": data.get("image_uris", {}).get("small"),
+                "type": data.get("type_line", ""),
+                "mana": data.get("mana_cost", ""),
+                "oracle": data.get("oracle_text", "")
             }
-    except:
+    except Exception:
         pass
 
     # Busca completa por prints (early stop se achar set permitido)
     next_page = data["prints_search_uri"]
     while next_page:
         try:
-            p = requests.get(next_page, timeout=8)
+            throttle()
+            p = SESSION.get(next_page, timeout=8)
             if p.status_code != 200:
                 break
             j = p.json()
             for c in j["data"]:
-                if "Token" not in c.get("type_line",""):
+                if "Token" not in c.get("type_line", ""):
                     set_code = c["set"].upper()
                     all_sets.add(set_code)
                     if set_code in allowed_sets:
@@ -119,17 +123,18 @@ def fetch_card_data(card_name):
                         break
             else:
                 next_page = j.get("next_page")
-        except:
+        except Exception:
             break
 
     return {
-        "name": data.get("name",""),
+        "name": data.get("name", ""),
         "sets": all_sets,
-        "image": data.get("image_uris",{}).get("normal"),
-        "type": data.get("type_line",""),
-        "mana": data.get("mana_cost",""),
-        "oracle": data.get("oracle_text","")
+        "image": data.get("image_uris", {}).get("normal"),
+        "type": data.get("type_line", ""),
+        "mana": data.get("mana_cost", ""),
+        "oracle": data.get("oracle_text", "")
     }
+
 
 def check_legality(name, sets):
     if name in ban_list:
@@ -382,6 +387,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
