@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v12.2 (Deckbuilder: contador atualiza na hora)
-- Mantém Tab 1 revertida (layout estável)
-- Tab 3 (artes agrupadas por tipo): contador xN em cada tile atualiza imediatamente após o clique
-- Evita session_state dentro de threads (snapshot antes)
+Romantic Format Tools - v13 (Integrado)
+- Tab 1 (estável v8): imagem com badge de legalidade + contador xN na arte; controles [-1/+1] | [-4/+4] abaixo; atualização imediata
+- Tab 2: checker de decklist básico
+- Tab 3: Deckbuilder com ARTES em grade, agrupado por TIPO, com contador xN que atualiza NA HORA em cada tile
+- Boas práticas: threads só para carregar dados das cartas (snapshot do deck; nada de session_state dentro das threads)
 """
 import re
 import time
@@ -19,7 +20,7 @@ import streamlit as st
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "RomanticFormatTools/1.8 (+seu_email_ou_site)",
+        "User-Agent": "RomanticFormatTools/1.9 (+seu_email_ou_site)",
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
@@ -156,22 +157,38 @@ def remove_card(card_name, qty=1):
     st.session_state.last_action = "remove"
 
 # -------------------------
-# App + CSS base (igual da v12.1, sem max-width Tab1 pois você está usando v8)
+# App + CSS (layout centrado para manter a Tab 1 como no v8)
 # -------------------------
-st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="wide")
+st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
 st.markdown(
     """
     <style>
+    /* Imagem base + sombra */
     [data-testid="stImage"] img, .rf-img{ display:block; width:100%; height:auto; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12); }
-    .row-qty div.stButton>button{ padding:4px 8px; border-radius:10px; font-size:12px }
+
+    /* Overlays Tab 1 (v8) */
+    .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    .rf-card img.rf-img{ display:block; width:100%; height:auto; }
+    .rf-badge-overlay{ position:absolute; left:50%; transform:translateX(-50%); top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px; background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08); pointer-events:none; white-space:nowrap; }
+    .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
+    .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
+    .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
+    .rf-qty-badge{ position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px; border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px); }
+
+    /* Botões */
     div.stButton>button{ width:100%; min-width:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a; font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08); }
     div.stButton>button:hover{ background:#f1f5f9 }
+    .row-qty div.stButton>button{ padding:4px 8px; border-radius:10px; font-size:12px }
+
     .rf-tile-name{ font-size:.86rem; font-weight:600; margin:.25rem 0 .15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
     .rf-sec-title{ font-size:1.0rem; font-weight:800; margin-top:.75rem }
+    .rf-spacer{ height:6px }
+
+    /* Reduz padding das columns para caber mais cartas sem estourar */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
-    @media (max-width: 1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
-    @media (max-width: 820px){  [data-testid="column"]{ padding-left:.2rem;  padding-right:.2rem  } }
+    @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
+    @media (max-width:820px){  [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -181,11 +198,23 @@ st.title("\U0001F9D9 Romantic Format Tools")
 
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder (artes)"])
 
+# Helper: render HTML do card (Tab 1)
+
+def render_card_html(img_url: str, nome: str, status_text: str, status_type: str, qty: int) -> str:
+    cls = {"success":"rf-success","warning":"rf-warning","danger":"rf-danger"}.get(status_type, "rf-warning")
+    return f"""
+        <div class='rf-card'>
+          <img src='{img_url}' class='rf-img' alt='{nome}'/>
+          <div class='rf-badge-overlay {cls}'>{status_text}</div>
+          <div class='rf-qty-badge'>x{qty}</div>
+        </div>
+    """
+
 # -------------------------
-# Tab 1 - Single Card Checker (revertido ao v8)
+# Tab 1 - Single Card Checker (v8)
 # -------------------------
 with tab1:
-    query = st.text_input("Digite o começo do nome da carta:", value="")
+    query = st.text_input("Digite o começo do nome da carta:")
     thumbs = []
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
@@ -203,36 +232,27 @@ with tab1:
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
                 safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
-                    # Placeholder do card (vamos atualizar após cliques)
                     card_ph = st.empty()
                     qty_before = st.session_state.deck.get(nome, 0)
                     card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
 
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
-                    # Controles em DUAS colunas: [-1/+1] | [-4/+4]
                     left, right = st.columns([1, 1], gap="small")
-
                     clicked = False
                     with left:
                         c1, c2 = st.columns([1, 1], gap="small")
                         if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 1)
-                            clicked = True
+                            remove_card(nome, 1); clicked=True
                         if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
-                            add_card(nome, 1)
-                            clicked = True
-
+                            add_card(nome, 1); clicked=True
                     with right:
                         c3, c4 = st.columns([1, 1], gap="small")
                         if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 4)
-                            clicked = True
+                            remove_card(nome, 4); clicked=True
                         if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                            add_card(nome, 4)
-                            clicked = True
+                            add_card(nome, 4); clicked=True
 
-                    # Re-renderiza o card com a nova quantidade nesta mesma execução
                     if clicked:
                         qty_after = st.session_state.deck.get(nome, 0)
                         card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
@@ -240,7 +260,7 @@ with tab1:
                     st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
-# Tab 2 – igual
+# Tab 2 - Decklist Checker
 # -------------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
@@ -280,7 +300,7 @@ with tab2:
             st.success("Decklist adicionada ao Deckbuilder!")
 
 # -------------------------
-# Tab 3 – Deckbuilder com artes (contador instantâneo por tile)
+# Tab 3 - Deckbuilder (artes agrupadas + contador instantâneo)
 # -------------------------
 with tab3:
     st.subheader("\U0001F9D9\u200d♂️ Seu Deck — artes agrupadas por tipo")
@@ -338,37 +358,31 @@ with tab3:
                 for c, (name, qty_init, _, img) in zip(cols, row):
                     with c:
                         if img: st.image(img, use_container_width=True)
-                        if show_names: st.markdown(f"<div class='rf-tile-name' title='{name}'>{name}</div>", unsafe_allow_html=True)
+                        if show_names:
+                            st.markdown(f"<div class='rf-tile-name' title='{name}'>{name}</div>", unsafe_allow_html=True)
 
-                        # Linha de controles com contador instantâneo
+                        # Controles com contador instantâneo
                         st.markdown('<div class="row-qty">', unsafe_allow_html=True)
                         g1, g2, g3, g4, labcol = st.columns([1,1,1,1,2])
-
-                        # 1) Mostra contador atual
                         label_ph = labcol.empty()
                         label_ph.markdown(f"**x{st.session_state.deck.get(name, 0)}**")
 
-                        # 2) Processa cliques
                         clicked = False
                         if g1.button("−1", key=f"db_m1_{sec}_{i}_{name}"):
-                            remove_card(name, 1); clicked = True
+                            remove_card(name, 1); clicked=True
                         if g2.button("+1", key=f"db_p1_{sec}_{i}_{name}"):
-                            add_card(name, 1); clicked = True
+                            add_card(name, 1); clicked=True
                         if g3.button("−4", key=f"db_m4_{sec}_{i}_{name}"):
-                            remove_card(name, 4); clicked = True
+                            remove_card(name, 4); clicked=True
                         if g4.button("+4", key=f"db_p4_{sec}_{i}_{name}"):
-                            add_card(name, 4); clicked = True
+                            add_card(name, 4); clicked=True
 
-                        # 3) Atualiza o contador NA MESMA RODADA
                         if clicked:
                             label_ph.markdown(f"**x{st.session_state.deck.get(name, 0)}**")
-
                         st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown("---")
 
-        # Exportar deck
         export_lines = [f"{qty}x {name}" for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
         export_text = "\n".join(export_lines)
         st.download_button("⬇️ Baixar deck (.txt)", data=export_text, file_name="deck.txt", mime="text/plain")
-
