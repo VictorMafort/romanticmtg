@@ -1,12 +1,10 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.5 (Centered buttons)
-- Aba 1: grupo de botões (−4 −1 +1 +4) centralizado por carta
-- Aba 2: botão "Adicionar lista ao Deckbuilder" centralizado
-- Aba 3: botões (➖ ➕) centralizados sobre a arte; mantém limite de tamanho da carta equivalente a 3 por linha
-- Rodapé: botão de download centralizado
-- Mantidos os fixes de contraste, z-index e cálculo de --rf-card-max
+Romantic Format Tools - v13.6 (Tab 3 fixed max size)
+- Aba 1: mantém 3 por linha e limite dinâmico (como antes)
+- Aba 3: **tamanho máximo FIXO** por carta, alinhado com a barra de botões
+- Botões continuam centralizados (Aba 1, 2 e 3)
 """
 import re
 import time
@@ -84,7 +82,6 @@ def fetch_card_data(card_name):
             return {
                 "name": data.get("name", ""),
                 "sets": all_sets,
-                # Preferir 'normal' com fallback 'small'
                 "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
                 "type": data.get("type_line", ""),
             }
@@ -147,22 +144,29 @@ st.markdown(
     """
     <style>
     :root{
-      /* Largura aproximada do container central do Streamlit */
+      /* ===== Aba 1 (dinâmico ~ 3 por linha) ===== */
       --rf-container-w: min(1200px, calc(100vw - 6rem));
-      /* Gap aproximado entre colunas e padding interno */
       --rf-col-gap: 1.2rem;
       --rf-col-pad: .35rem;
-      /* Máx = largura de 1 carta quando existem 3 por linha */
       --rf-card-max: calc(
         (var(--rf-container-w) - (2 * var(--rf-col-pad) * 3) - (2 * var(--rf-col-gap))) / 3
       );
-      /* Segurança no mobile */
       --rf-card-max: clamp(220px, var(--rf-card-max), 44vw);
+
+      /* ===== Aba 3 (FIXO) ===== */
+      /* Ajuste aqui o tamanho máximo desejado para cada carta na Aba 3 */
+      --rf-card3-max: 300px; /* <- mude para 280px ou 320px se preferir */
     }
+
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
     .rf-card img.rf-img{ display:block; width:100%; height:auto; }
-    /* Mantém o tile sob controle (não crescer além do “3 por linha”) */
+
+    /* Aba 1/geral: não crescer além do “3 por linha” calculado */
     .rf-fixed{ max-width: var(--rf-card-max); margin:0 auto; }
+
+    /* Aba 3: tamanho FIXO máximo */
+    .rf-fixed3{ max-width: var(--rf-card3-max); margin:0 auto; }
+
     /* Chips/badges */
     .rf-name-badge{
       position:absolute; left:50%; transform:translateX(-50%);
@@ -174,11 +178,14 @@ st.markdown(
     .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
     .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
     .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
-    /* Barra -/+ "sobre" a arte (Aba 3) */
+
+    /* Barra -/+ "sobre" a arte (Aba 3) -> alinhada ao tamanho FIXO */
     .rf-inart-belt{
-      max-width: var(--rf-card-max); margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20;
+      max-width: var(--rf-card3-max);  /* <- usa o fixo da aba 3 */
+      margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20;
     }
-    /* Estiliza botões que aparecem DEPOIS da belt no fluxo */
+
+    /* Estilo dos botões após a belt */
     .rf-inart-belt + div [data-testid="column"] div.stButton>button,
     .rf-inart-belt ~ div [data-testid="column"] div.stButton>button{
       width:auto; min-width:40px; height:40px; padding:0 14px; border-radius:999px; font-size:18px; font-weight:800; line-height:1; display:inline-flex; align-items:center; justify-content:center;
@@ -186,10 +193,11 @@ st.markdown(
     }
     .rf-inart-belt + div [data-testid="column"] div.stButton>button:hover,
     .rf-inart-belt ~ div [data-testid="column"] div.stButton>button:hover{ background:#eef2f7 }
+
     /* columns padding geral */
     [data-testid="column"]{ padding-left:.35rem; padding-right:.35rem }
     @media (max-width:1100px){ [data-testid="column"]{ padding-left:.25rem; padding-right:.25rem } }
-    @media (max-width:820px){ [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
+    @media (max-width:820px){  [data-testid="column"]{ padding-left:.20rem; padding-right:.20rem } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -288,7 +296,7 @@ with tab2:
                 st.success("Decklist adicionada ao Deckbuilder!")
 
 # --------------------
-# Tab 3 — Artes por tipo + in-image +/- + contador instantâneo
+# Tab 3 — Artes por tipo (tamanho FIXO) + +/- centralizado
 # --------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
@@ -346,9 +354,9 @@ with tab3:
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
                         legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
-                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
 
-                        # Barra +/-: marcador visual para largura/posição
+                        # Barra +/-: marcador visual para largura/posição (usa --rf-card3-max)
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
 
                         # Centraliza os dois botões no miolo
@@ -363,7 +371,7 @@ with tab3:
 
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
-                            card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                            card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed3"), unsafe_allow_html=True)
                 st.markdown("---")
 
         # Export (centralizado)
