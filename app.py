@@ -352,30 +352,31 @@ if thumbs:
             with cols[j]:
                 pickq = quote(nome)
 
-                html = f"""
-                <div class="rf-card">
-                  <img src="{img}" class="rf-img" alt="{nome}"/>
-                  <div class="rf-gradient"></div>
+               html = f"""
+<div class="rf-card">
+  <img src="{img}" class="rf-img" alt="{nome}"/>
+  <div class="rf-gradient"></div>
 
-                  <!-- Topo: legalidade (aparece no hover) -->
-                  <div class="rf-top">
-                    <span class="rf-badge {_badge_class(status_type)}">{status_text}</span>
-                  </div>
+  <!-- Topo: legalidade (aparece no hover) -->
+  <div class="rf-top">
+    <span class="rf-badge {_badge_class(status_type)}">{status_text}</span>
+  </div>
 
-                  <!-- Rodapé: duas pílulas (-1/+1) e (-4/+4), aparecem no hover -->
-                  <div class="rf-bottom">
-                    <div class="rf-pill">
-                      <a class="rf-btn" href="?pick={pickq}&delta=-1">-1</a>
-                      <a class="rf-btn" href="?pick={pickq}&delta=+1">+1</a>
-                    </div>
-                    <div class="rf-pill">
-                      <a class="rf-btn" href="?pick={pickq}&delta=-4">-4</a>
-                      <a class="rf-btn" href="?pick={pickq}&delta=+4">+4</a>
-                    </div>
-                  </div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
+  <!-- Rodapé: duas pílulas (-1/+1) e (-4/+4), aparecem no hover -->
+  <div class="rf-bottom">
+    <div class="rf-pill">
+      <a class="rf-btn" href="?pick={pickq}&delta=-1" target="_self">-1</a>
+      <a class="rf-btn" href="?pick={pickq}&delta=+1" target="_self">+1</a>
+    </div>
+    <div class="rf-pill">
+      <a class="rf-btn" href="?pick={pickq}&delta=-4" target="_self">-4</a>
+      <a class="rf-btn" href="?pick={pickq}&delta=+4" target="_self">+4</a>
+    </div>
+  </div>
+</div>
+"""
+st.markdown(html, unsafe_allow_html=True)
+
 
 
 # =========================
@@ -521,6 +522,7 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
