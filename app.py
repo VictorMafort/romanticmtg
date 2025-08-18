@@ -230,15 +230,38 @@ def remove_card(card_name, qty=1):
 st.title("🧙 Romantic Format Tools")
 tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder"])
 
-# Captura de clique via query param (?pick=Nome)
+# Captura de clique via query param (?pick=Nome&delta=±1/±4)
 picked = None
 try:
     params = st.query_params
-    if "pick" in params and params["pick"]:
-        picked = params["pick"][0]
+    pick  = params.get("pick")
+    delta = params.get("delta")
+
+    if pick and delta:
+        try:
+            d = int(delta)
+        except Exception:
+            d = 0
+
+        if d > 0:
+            add_card(pick, d)
+            st.session_state.last_change = pick
+            st.session_state.last_action = "add"
+        elif d < 0:
+            remove_card(pick, -d)
+            st.session_state.last_change = pick
+            st.session_state.last_action = "remove"
+
+        # limpa a URL para evitar repetição ao recarregar
         st.query_params.clear()
+
+    elif pick:
+        picked = pick
+        st.query_params.clear()
+
 except Exception:
     pass
+
 	
 # =========================
 # Tab 1 - Single Card Checker
@@ -264,7 +287,7 @@ with tab1:
                 )
                 thumbs.append((nome, data["image"], status_text, status_type))
 
-    if thumbs:
+if thumbs:
         st.caption("🔍 Sugestões:")
         cols_per_row = 3
         for i in range(0, len(thumbs), cols_per_row):
@@ -286,23 +309,6 @@ with tab1:
                         unsafe_allow_html=True
                     )
 
-                    # Quatro botões: -4, -1, +1, +4 (chaves estáveis)
-                    colA, colB, colC, colD = st.columns(4)
-
-                    if colA.button("-4", key=f"sub4_{i}_{idx}_{nome}"):
-                        remove_card(nome, 4)
-
-                    if colB.button("-1", key=f"sub1_{i}_{idx}_{nome}"):
-                        remove_card(nome, 1)
-
-                    if colC.button("+1", key=f"add1_{i}_{idx}_{nome}"):
-                        add_card(nome, 1)
-
-                    if colD.button("+4", key=f"add4_{i}_{idx}_{nome}"):
-                        add_card(nome, 4)
-# =========================
-# Tab 2 Deckchecker
-# =========================
 # =========================
 # Tab 2 – Decklist Checker
 # =========================
@@ -446,6 +452,7 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
