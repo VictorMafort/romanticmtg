@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v5 (overlay + contador + flash sem deslocar layout)
+Romantic Format Tools - v6 (overlay + contador + ripple nos botões)
 - Badge de legalidade sobre a arte (offset para não cobrir o nome)
-- Contador de quantidade do deck como chip no canto inferior direito da arte
-- Efeito de feedback visual nos botões (verde ao adicionar, vermelho ao remover)
-  sem deslocar layout (marcador zero-dimensões + animação no próprio botão)
+- Contador de quantidade do deck no canto inferior direito
+- Efeito ripple nos botões ao adicionar/remover, sem deslocar layout
 """
 import re
 import time
@@ -175,7 +174,7 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="\U0001F9D9", layout="centered")
 
-# CSS (overlay + contador + flash sem deslocar)
+# CSS (overlay + contador + ripple)
 st.markdown(
     """
     <style>
@@ -204,27 +203,32 @@ st.markdown(
         border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
     }
 
-    /* Botões-pílula */
+    /* Botões-pílula com ripple */
     div.stButton>button{
+        position:relative; overflow:hidden; /* necessário para ripple */
         width:100%; min-width:0; padding:6px 10px; border-radius:999px;
         border:1px solid rgba(0,0,0,.10); background:#fff; color:#0f172a;
         font-weight:700; font-size:13px; line-height:1.2; box-shadow:0 1px 3px rgba(0,0,0,.08);
-        transition: background .15s ease, box-shadow .15s ease, filter .15s ease;
+        transition: background .15s ease, box-shadow .15s ease;
     }
     div.stButton>button:hover{ background:#f1f5f9 }
 
-    /* Marcadores de flash que não ocupam espaço (evita deslocar layout) */
-    .rf-flash-marker{ position:absolute; width:0; height:0; overflow:hidden; }
+    /* Marcador zero-dimensões (não desloca layout) */
+    .rf-ripple-marker{ position:absolute; width:0; height:0; overflow:hidden; }
 
-    /* Animações aplicadas no botão seguinte ao marcador */
-    @keyframes rfFlashGreen{ 0%{filter:drop-shadow(0 0 0 #86efac)} 30%{filter:drop-shadow(0 0 6px #86efac)} 100%{filter:none} }
-    @keyframes rfFlashRed{ 0%{filter:drop-shadow(0 0 0 #fca5a5)} 30%{filter:drop-shadow(0 0 6px #fca5a5)} 100%{filter:none} }
-    .rf-flash-add + div button{ animation: rfFlashGreen .6s ease-out 1 }
-    .rf-flash-rem + div button{ animation: rfFlashRed .6s ease-out 1 }
+    /* Pseudo-elemento ripple animado no botão seguinte ao marcador */
+    .rf-ripple-add + div button::after,
+    .rf-ripple-rem + div button::after{
+        content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(0);
+        width:180%; height:180%; border-radius:50%; pointer-events:none; opacity:.65;
+    }
+    .rf-ripple-add + div button::after{ background: radial-gradient(circle, rgba(34,197,94,.35) 0%, rgba(34,197,94,.25) 30%, rgba(34,197,94,0) 60%); animation: rfRippleGrow .6s ease-out forwards }
+    .rf-ripple-rem + div button::after{ background: radial-gradient(circle, rgba(239,68,68,.35) 0%, rgba(239,68,68,.25) 30%, rgba(239,68,68,0) 60%); animation: rfRippleGrow .6s ease-out forwards }
 
-    /* Acessibilidade: desativa animação se usuário preferir menos movimento */
+    @keyframes rfRippleGrow{ from{ transform:translate(-50%,-50%) scale(0); opacity:.7 } to{ transform:translate(-50%,-50%) scale(1); opacity:0 } }
+
     @media (prefers-reduced-motion: reduce){
-      .rf-flash-add + div button, .rf-flash-rem + div button{ animation: none }
+      .rf-ripple-add + div button::after, .rf-ripple-rem + div button::after{ animation:none }
     }
 
     .rf-spacer{height:8px}
@@ -306,12 +310,12 @@ with tab1:
                         c1, c2 = st.columns([1, 1], gap="small")
                         with c1:
                             if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-flash-marker rf-flash-rem"></span>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-ripple-marker rf-ripple-rem"></span>', unsafe_allow_html=True)
                             if st.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
                                 remove_card(nome, 1)
                         with c2:
                             if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-flash-marker rf-flash-add"></span>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-ripple-marker rf-ripple-add"></span>', unsafe_allow_html=True)
                             if st.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
                                 add_card(nome, 1)
 
@@ -322,12 +326,12 @@ with tab1:
                         c3, c4 = st.columns([1, 1], gap="small")
                         with c3:
                             if st.session_state.get("last_action") == "remove" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-flash-marker rf-flash-rem"></span>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-ripple-marker rf-ripple-rem"></span>', unsafe_allow_html=True)
                             if st.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
                                 remove_card(nome, 4)
                         with c4:
                             if st.session_state.get("last_action") == "add" and st.session_state.get("last_change") == nome:
-                                st.markdown('<span class="rf-flash-marker rf-flash-add"></span>', unsafe_allow_html=True)
+                                st.markdown('<span class="rf-ripple-marker rf-ripple-add"></span>', unsafe_allow_html=True)
                             if st.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
                                 add_card(nome, 4)
 
