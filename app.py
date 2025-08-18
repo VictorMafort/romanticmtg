@@ -1,13 +1,17 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.3
+Romantic Format Tools — FINAL v18.4
 Autor: Victor + Copilot
 
-Mudanças nesta versão (v18.3):
-- **Remove `st.experimental_rerun()`** dos botões da Aba 3 (não é necessário; o clique do botão já provoca rerun).
-- Mantém a organização da Aba 3 e os **símbolos de mana** no badge do topo.
-- Mantém o fix do Altair (donut) da v18.1.
+Objetivo desta versão (v18.4):
+- **Cliques sem delay na Aba 3**
+  - Introduz cache de metadados local em `st.session_state.meta_cache` (imagem, tipo, legalidade, identidade de cor)
+    para **não refazer buscas** a cada clique.
+  - Apenas cartas **novas** no deck disparam busca na Scryfall (com `@st.cache_data` + cache local).
+  - Remove spinner da Aba 3; o rebuild do layout fica leve, pois só lê do cache.
+- Mantém: layout com botões abaixo da carta e símbolos de mana no badge.
+- Mantém: fix do Altair (donut) da v18.1 na Aba 4.
 """
 import re
 import time
@@ -23,6 +27,9 @@ import altair as alt
 # ===== Estado global seguro =====
 if 'deck' not in st.session_state:
     st.session_state.deck = {}
+if 'meta_cache' not in st.session_state:
+    # name -> {type, image, status_text, status_type, color_identity}
+    st.session_state.meta_cache = {}
 if 'last_change' not in st.session_state:
     st.session_state.last_change = None
 if 'last_action' not in st.session_state:
@@ -174,7 +181,7 @@ st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout=
 with st.sidebar:
     st.markdown("### ⚙️ Utilitários")
     if st.button("🔄 Limpar cache de cartas"):
-        fetch_card_data.clear(); st.rerun()
+        fetch_card_data.clear(); st.session_state.meta_cache.clear(); st.rerun()
 
 st.markdown(
     """
@@ -323,9 +330,8 @@ with tab2:
 
     if deck_input.strip():
         lines = deck_input.splitlines()
-        with st.spinner("Checando decklist..."):
-            with ThreadPoolExecutor(max_workers=8) as ex:
-                results = list(ex.map(process_line, lines))
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            results = list(ex.map(process_line, lines))
         results = [r for r in results if r]
         for name, qty, status_text, status_type, _ in results:
             color = {"success": "green", "warning": "orange", "danger": "red"}[status_type]
@@ -351,26 +357,24 @@ with tab3:
         snap = dict(st.session_state.deck)
         names = sorted(snap.keys(), key=lambda x: x.lower())
 
-        def load_one(nm: str):
-            try:
-                d = fetch_card_data(nm)
-                sets = d.get("sets", set()) if d else set()
-                status_text, status_type = check_legality(nm, sets)
-                return (
-                    nm,
-                    snap.get(nm, 0),
-                    (d.get("type", "") if d else ''),
-                    (d.get("image") if d else None),
-                    status_text,
-                    status_type,
-                    (d.get("color_identity") if d else []),
-                )
-            except Exception:
-                return (nm, snap.get(nm, 0), '', None, '', 'warning', [])
-
-        with st.spinner("Carregando artes..."):
-            with ThreadPoolExecutor(max_workers=min(6, max(1, len(names)))) as ex:
-                items = list(ex.map(load_one, names))
+        # ====== Carrega metadados só para cartas novas (cache local + cache_data)
+        missing = [nm for nm in names if nm not in st.session_state.meta_cache]
+        if missing:
+            with ThreadPoolExecutor(max_workers=min(6, max(1, len(missing)))) as ex:
+                def load_one(nm: str):
+                    d = fetch_card_data(nm)
+                    sets = d.get("sets", set()) if d else set()
+                    status_text, status_type = check_legality(nm, sets)
+                    return {
+                        'name': nm,
+                        'type': (d.get("type", "") if d else ''),
+                        'image': (d.get("image") if d else None),
+                        'status_text': status_text,
+                        'status_type': status_type,
+                        'color_identity': (d.get("color_identity") if d else []),
+                    }
+                for it in ex.map(load_one, missing):
+                    st.session_state.meta_cache[it['name']] = it
 
         def bucket(tline: str) -> str:
             tl = tline or ''
@@ -383,52 +387,55 @@ with tab3:
             if 'Artifact' in tl: return 'Artefatos'
             return 'Outros'
 
+        # Monta buckets **a partir do cache**, sem I/O
         buckets = defaultdict(list)
-        for name, qty, tline, img, s_text, s_type, ci in items:
-            buckets[bucket(tline)].append((name, qty, tline, img, s_text, s_type, ci))
+        for nm in names:
+            meta = st.session_state.meta_cache.get(nm, {})
+            buckets[bucket(meta.get('type',''))].append(meta)
 
         order = ["Criaturas", "Instantâneas", "Feitiços", "Artefatos", "Encantamentos", "Planeswalkers", "Terrenos", "Outros"]
-        cols_per_row = 6  # fixo; cap visual controlado por CSS (--rf-card3-max)
-
+        cols_per_row = 6
         mana_icons = {'W':'⚪','U':'🔵','B':'⚫','R':'🔴','G':'🟢','C':'⬜️'}
 
         for sec in order:
             if sec not in buckets:
                 continue
             group = buckets[sec]
-            st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _, _ in group)}")
+            st.markdown(f"### {sec} — {sum(snap.get(m['name'],0) for m in group)}")
             for i in range(0, len(group), cols_per_row):
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
-                for col, (name, _q0, _t, img, s_text, s_type, ci) in zip(cols, row):
-                    with col:
-                        # 1) RENDERIZA CARTA PRIMEIRO
-                        qty = st.session_state.deck.get(name, 0)
-                        if qty <= 0 or not img:
-                            continue
-                        chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
-                        legal_html = (
-                            f"<span class='rf-legal-chip{chip_class}'>" +
-                            ("Banned" if s_type == "danger" else ("Not Legal" if s_type == "warning" else "")) +
-                            "</span>"
-                        ) if s_type != "success" else ""
-                        # símbolos de mana da identidade (ou cor incolor)
-                        ci_strip = ''.join(mana_icons.get(c, '') for c in (ci or [])) or mana_icons['C']
-                        overlay = f"<div class='rf-name-badge'><span class='rf-ci'>{ci_strip}</span>{name}{legal_html}</div>"
-                        st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
+                for col, meta in zip(cols, row):
+                    name = meta['name']
+                    img = meta.get('image')
+                    s_type = meta.get('status_type','success')
+                    qty = snap.get(name, 0)
+                    if qty <= 0 or not img:
+                        continue
 
-                        # 2) CONTROLES ABAIXO DA CARTA (compactos)
-                        with st.container():
-                            st.markdown('<div class="rf-tight"></div>', unsafe_allow_html=True)
-                            mcol, pcol = st.columns([1, 1])
-                            if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
-                                new_q = max(0, st.session_state.deck.get(name,0) - 1)
-                                if new_q == 0:
-                                    st.session_state.deck.pop(name, None)
-                                else:
-                                    st.session_state.deck[name] = new_q
-                            if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
-                                st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
+                    chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
+                    legal_html = (
+                        f"<span class='rf-legal-chip{chip_class}'>" +
+                        ("Banned" if s_type == "danger" else ("Not Legal" if s_type == "warning" else "")) +
+                        "</span>"
+                    ) if s_type != "success" else ""
+
+                    ci = meta.get('color_identity') or []
+                    ci_strip = ''.join(mana_icons.get(c, '') for c in ci) or mana_icons['C']
+                    overlay = f"<div class='rf-name-badge'><span class='rf-ci'>{ci_strip}</span>{name}{legal_html}</div>"
+
+                    with col:
+                        st.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
+                        # Controles compactos abaixo da carta
+                        mcol, pcol = st.columns([1, 1])
+                        if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                            new_q = max(0, st.session_state.deck.get(name,0) - 1)
+                            if new_q == 0:
+                                st.session_state.deck.pop(name, None)
+                            else:
+                                st.session_state.deck[name] = new_q
+                        if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                            st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
 
             st.markdown("---")
 
@@ -456,9 +463,8 @@ with tab4:
             except Exception:
                 return {'name': nm, 'qty': snap.get(nm,0), 'type_line': '', 'color_identity': [], 'produced_mana': []}
 
-        with st.spinner("Calculando estatísticas..."):
-            with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
-                meta = list(ex.map(load_meta, names))
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
+            meta = list(ex.map(load_meta, names))
         df = pd.DataFrame(meta)
 
         # ===== Subtipos de Criaturas =====
@@ -467,7 +473,6 @@ with tab4:
         def extract_subtypes(tline: str):
             if not tline or 'Creature' not in tline:
                 return []
-            # Divide no separador de tipo/subtipo (—, -, –)
             parts = re.split(r'\s*[—\-–]\s*', tline)
             if len(parts) < 2:
                 return []
