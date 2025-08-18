@@ -161,33 +161,67 @@ st.markdown("""
   width: 100%;
   height: auto;
 }
-.rf-top {
+
+/* Gradiente para dar contraste em topo/rodapé */
+.rf-gradient {
   position: absolute;
-  top: 8px; left: 8px; right: 8px;
-  display: flex;
-  justify-content: flex-start;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.40) 0%,
+    rgba(0,0,0,0.00) 38%,
+    rgba(0,0,0,0.00) 62%,
+    rgba(0,0,0,0.50) 100%
+  );
+  opacity: 0;
+  transition: opacity .18s ease;
+  pointer-events: none;
 }
+
+/* Containers de topo e rodapé (ocultos por padrão) */
+.rf-top, .rf-bottom {
+  position: absolute;
+  left: 8px; right: 8px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none;
+}
+.rf-top { top: 8px; justify-content: flex-start; }
+.rf-bottom {
+  bottom: 8px;
+  justify-content: space-between;
+  transform: translateY(6px);
+}
+
+/* Mostra no hover */
+.rf-card:hover .rf-gradient { opacity: 1; }
+.rf-card:hover .rf-top,
+.rf-card:hover .rf-bottom {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Badge de legalidade */
 .rf-badge {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 999px;
   font-weight: 700;
   font-size: .82rem;
-  backdrop-filter: blur(2px);
+  background: rgba(255,255,255,.92);
+  color: #0f172a;
   box-shadow: 0 1px 4px rgba(0,0,0,.15);
+  border: 1px solid rgba(0,0,0,.08);
 }
-.rf-success { color:#166534; background:#dcfce7; }
-.rf-warning { color:#92400e; background:#fef3c7; }
-.rf-danger  { color:#991b1b; background:#fee2e2; }
+.rf-success { color:#166534; background:#dcfce7; border-color:#bbf7d0; }
+.rf-warning { color:#92400e; background:#fef3c7; border-color:#fde68a; }
+.rf-danger  { color:#991b1b; background:#fee2e2; border-color:#fecaca; }
 
-.rf-bottom {
-  position: absolute;
-  left: 8px; right: 8px; bottom: 8px;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  align-items: center;
-}
+/* Pílulas de botões */
 .rf-pill {
   display: inline-flex;
   gap: 6px;
@@ -210,8 +244,19 @@ st.markdown("""
   border: 1px solid rgba(0,0,0,.08);
 }
 .rf-btn:hover { background: #f1f5f9; }
+
+/* Acessibilidade: em dispositivos touch (sem hover), manter visível */
+@media (hover: none) and (pointer: coarse) {
+  .rf-gradient { opacity: 1; }
+  .rf-top, .rf-bottom {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # Estado do deck
@@ -288,26 +333,50 @@ with tab1:
                 thumbs.append((nome, data["image"], status_text, status_type))
 
 if thumbs:
-        st.caption("🔍 Sugestões:")
-        cols_per_row = 3
-        for i in range(0, len(thumbs), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for idx, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                color = {
-                    "success": "green",
-                    "warning": "orange",
-                    "danger": "red"
-                }[status_type]
+    st.caption("🔎 Sugestões:")
+    cols_per_row = 3
 
-                with cols[idx]:
-                    # Imagem da carta
-                    st.image(img, use_container_width=True)
+    from urllib.parse import quote
 
-                    # Status (legal, banned, warning)
-                    st.markdown(
-                        f"<div style='text-align:center; color:{color}; font-weight:bold;'>{status_text}</div>",
-                        unsafe_allow_html=True
-                    )
+    def _badge_class(status_type: str) -> str:
+        return {
+            "success": "rf-success",
+            "warning": "rf-warning",
+            "danger":  "rf-danger",
+        }.get(status_type, "rf-warning")
+
+    for i in range(0, len(thumbs), cols_per_row):
+        cols = st.columns(cols_per_row)
+
+        for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+            with cols[j]:
+                pickq = quote(nome)
+
+                html = f"""
+                <div class="rf-card">
+                  <img src="{img}" class="rf-img" alt="{nome}"/>
+                  <div class="rf-gradient"></div>
+
+                  <!-- Topo: legalidade (aparece no hover) -->
+                  <div class="rf-top">
+                    <span class="rf-badge {_badge_class(status_type)}">{status_text}</span>
+                  </div>
+
+                  <!-- Rodapé: duas pílulas (-1/+1) e (-4/+4), aparecem no hover -->
+                  <div class="rf-bottom">
+                    <div class="rf-pill">
+                      <a class="rf-btn" href="?pick={pickq}&delta=-1">-1</a>
+                      <a class="rf-btn" href="?pick={pickq}&delta=+1">+1</a>
+                    </div>
+                    <div class="rf-pill">
+                      <a class="rf-btn" href="?pick={pickq}&delta=-4">-4</a>
+                      <a class="rf-btn" href="?pick={pickq}&delta=+4">+4</a>
+                    </div>
+                  </div>
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
+
 
 # =========================
 # Tab 2 – Decklist Checker
@@ -452,6 +521,7 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
