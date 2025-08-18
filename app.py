@@ -182,10 +182,62 @@ st.title("\U0001F9D9 Romantic Format Tools")
 tab1, tab2, tab3 = st.tabs(["\U0001F50D Single Card Checker", "\U0001F4E6 Decklist Checker", "\U0001F9D9 Deckbuilder (artes)"])
 
 # -------------------------
-# Tab 1 – você já está com v8 estável (não replico aqui)
+# Tab 1 - Single Card Checker (revertido ao v8)
 # -------------------------
 with tab1:
-    st.info("Esta build mantém sua Tab 1 estável (v8). Use seu arquivo v8 atual para esta aba.")
+    query = st.text_input("Digite o começo do nome da carta:", value="")
+    thumbs = []
+    if query.strip():
+        sugestoes = buscar_sugestoes(query.strip())
+        for nome in sugestoes[:21]:
+            data = fetch_card_data(nome)
+            if data and data.get("image"):
+                status_text, status_type = check_legality(data["name"], data.get("sets", []))
+                thumbs.append((data["name"], data["image"], status_text, status_type))
+
+    if thumbs:
+        st.caption("\U0001F50E Sugestões:")
+        cols_per_row = 3
+        for i in range(0, len(thumbs), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
+                safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
+                with cols[j]:
+                    # Placeholder do card (vamos atualizar após cliques)
+                    card_ph = st.empty()
+                    qty_before = st.session_state.deck.get(nome, 0)
+                    card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_before), unsafe_allow_html=True)
+
+                    st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
+
+                    # Controles em DUAS colunas: [-1/+1] | [-4/+4]
+                    left, right = st.columns([1, 1], gap="small")
+
+                    clicked = False
+                    with left:
+                        c1, c2 = st.columns([1, 1], gap="small")
+                        if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 1)
+                            clicked = True
+                        if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
+                            add_card(nome, 1)
+                            clicked = True
+
+                    with right:
+                        c3, c4 = st.columns([1, 1], gap="small")
+                        if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 4)
+                            clicked = True
+                        if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
+                            add_card(nome, 4)
+                            clicked = True
+
+                    # Re-renderiza o card com a nova quantidade nesta mesma execução
+                    if clicked:
+                        qty_after = st.session_state.deck.get(nome, 0)
+                        card_ph.markdown(render_card_html(img, nome, status_text, status_type, qty_after), unsafe_allow_html=True)
+
+                    st.markdown('<div class="rf-spacer"></div>', unsafe_allow_html=True)
 
 # -------------------------
 # Tab 2 – igual
@@ -319,3 +371,4 @@ with tab3:
         export_lines = [f"{qty}x {name}" for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
         export_text = "\n".join(export_lines)
         st.download_button("⬇️ Baixar deck (.txt)", data=export_text, file_name="deck.txt", mime="text/plain")
+
