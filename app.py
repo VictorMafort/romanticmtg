@@ -3,8 +3,26 @@ import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import re
-from concurrent.futures import ThreadPoolExecutor
 
+# --- Sessão HTTP compartilhada + headers + throttle da Scryfall ---
+import time
+from collections import deque
+
+SESSION = requests.Session()
+SESSION.headers.update({
+    # identifique seu app (pode trocar por seu email/site)
+    "User-Agent": "RomanticFormatTools/0.1 (+seu_email_ou_site)",
+    "Accept": "application/json;q=0.9,*/*;q=0.8",
+})
+
+# throttling simples para respeitar ~10 req/s
+_last = deque(maxlen=10)
+def throttle():
+    _last.append(time.time())
+    if len(_last) == _last.maxlen:
+        elapsed = _last[-1] - _last[0]
+        if elapsed < 1.0:
+            time.sleep(1.0 - elapsed)
 
 # =========================
 # Config & listas
@@ -366,6 +384,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
