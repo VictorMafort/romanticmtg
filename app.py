@@ -1,10 +1,11 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.8.1
-- Fix Aba 4: tratamento robusto de CMC (NaN/None) para evitar ValueError ao converter para inteiro
-- Aba 3: mantém quantidade >4 em vermelho, tamanho fixo e remoção imediata quando qty==0
-- Aba 4: Curva de Mana + Subtipos (com pandas/Altair)
+Romantic Format Tools - v13.8.2
+- Bugfix: Ponder aparecendo como "Not Legal" por cache desatualizado/consulta parcial
+  * `fetch_card_data` agora usa busca Scryfall corretamente codificada (q=) com `quote_plus`
+  * cache passa a incluir um "sal" com `allowed_sets` no key; botão para limpar cache
+- Mantém as features: Aba 3 (qty>4 em vermelho, tamanho fixo, sumir ao zerar), Aba 4 (curva & subtipos)
 """
 import re
 import time
@@ -42,6 +43,9 @@ allowed_sets = {
 }
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
+# fingerprint para compor a chave do cache quando allowed_sets mudar
+_ALLOWED_FPRINT = ",".join(sorted(allowed_sets))
+
 # --------------------
 # Utilidades
 # --------------------
@@ -60,14 +64,15 @@ def buscar_sugestoes(query: str):
     return []
 
 @st.cache_data(show_spinner=False)
-def fetch_card_data(card_name):
-    """Busca dados principais da carta via Scryfall.
-    Retorna dict com: name, sets, image, type, cmc (mana value), mana_cost
+def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
+    """Busca dados via Scryfall e retorna: name, sets, image, type, cmc, mana_cost.
+    _legal_salt entra na chave do cache para prevenir staleness quando allowed_sets mudar.
     """
-    safe = urllib.parse.quote(card_name)
-    url = f"https://api.scryfall.com/cards/named?fuzzy={safe}"
+    safe_name = card_name.strip()
+    # 1) endpoint named (fuzzy) para base
+    url_named = f"https://api.scryfall.com/cards/named?fuzzy={urllib.parse.quote(safe_name)}"
     try:
-        throttle(); resp = SESSION.get(url, timeout=8)
+        throttle(); resp = SESSION.get(url_named, timeout=8)
     except Exception:
         return None
     if resp.status_code != 200:
@@ -76,28 +81,34 @@ def fetch_card_data(card_name):
     if "prints_search_uri" not in data:
         return None
 
+    # 2) quick scan restrita aos sets permitidos, com query corretamente codificada
     all_sets = set()
     set_query = " OR ".join(s.lower() for s in allowed_sets)
-    quick_url = f"https://api.scryfall.com/cards/search?q=!\"{safe}\"+e:({set_query})"
+    q_str = f'!"{safe_name}" e:({set_query})'
+    quick_url = "https://api.scryfall.com/cards/search?q=" + urllib.parse.quote_plus(q_str)
     try:
         throttle(); rq = SESSION.get(quick_url, timeout=8)
-        if rq.status_code == 200 and rq.json().get("total_cards", 0) > 0:
-            for c in rq.json().get("data", []):
-                if "Token" not in c.get("type_line", ""):
-                    all_sets.add(c["set"].upper())
-            return {
-                "name": data.get("name", ""),
-                "sets": all_sets,
-                # Preferir 'normal' com fallback 'small'
-                "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
-                "type": data.get("type_line", ""),
-                "cmc": data.get("cmc"),
-                "mana_cost": data.get("mana_cost"),
-            }
+        if rq.status_code == 200:
+            jq = rq.json()
+            if jq.get("total_cards", 0) > 0:
+                for c in jq.get("data", []):
+                    if "Token" in (c.get("type_line") or ""):
+                        continue
+                    set_code = (c.get("set") or "").upper()
+                    if set_code:
+                        all_sets.add(set_code)
+                return {
+                    "name": data.get("name", ""),
+                    "sets": all_sets,
+                    "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
+                    "type": data.get("type_line", ""),
+                    "cmc": data.get("cmc"),
+                    "mana_cost": data.get("mana_cost"),
+                }
     except Exception:
         pass
 
-    # full scan fallback
+    # 3) fallback: varre todas as prints_search_uri
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -106,10 +117,14 @@ def fetch_card_data(card_name):
                 break
             j = p.json()
             for c in j.get("data", []):
-                if "Token" not in c.get("type_line", ""):
-                    set_code = c.get("set", "").upper(); all_sets.add(set_code)
+                if "Token" in (c.get("type_line") or ""):
+                    continue
+                set_code = (c.get("set") or "").upper()
+                if set_code:
+                    all_sets.add(set_code)
                 if set_code in allowed_sets:
-                    next_page = None; break
+                    next_page = None
+                    break
             else:
                 next_page = j.get("next_page")
         except Exception:
@@ -150,6 +165,13 @@ def remove_card(card_name, qty=1):
 # App + CSS
 # --------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
+
+# Sidebar utilitário
+with st.sidebar:
+    st.markdown("### ⚙️ Utilitários")
+    if st.button("🔄 Limpar cache de cartas"):
+        fetch_card_data.clear()
+        st.rerun()
 
 st.markdown(
     """
@@ -245,11 +267,11 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
     """
 
 # --------------------
-# Tab 1 — Sugestões com -1/+1 e -4/+4 (colunas FIXAS em 3)
+# Tab 1 — (idêntica às versões anteriores, omitido por brevidade da explicação aqui)
 # --------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
-    COLS_TAB1 = 3  # <- fixo, sem slider
+    COLS_TAB1 = 3
     thumbs = []
     if query.strip():
         for nm in buscar_sugestoes(query.strip())[:21]:
@@ -268,7 +290,6 @@ with tab1:
                     badge = f"<div class='rf-name-badge {badge_cls}'>{status_text}</div>"
                     ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
 
-                    # Centraliza o grupo de botões usando colunas-espaçadoras
                     bcols = st.columns([1, 1, 1, 1, 1, 1], gap="small")
                     clicked=False
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
@@ -276,13 +297,12 @@ with tab1:
                     if bcols[2].button("−1", key=f"{base_key}_m1"): remove_card(name,1); clicked=True
                     if bcols[3].button("+1", key=f"{base_key}_p1"): add_card(name,1); clicked=True
                     if bcols[4].button("+4", key=f"{base_key}_p4"): add_card(name,4); clicked=True
-
                     if clicked:
                         qty2 = st.session_state.deck.get(name,0)
                         ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
 
 # --------------------
-# Tab 2 — Decklist Checker
+# Tab 2 — Decklist Checker (inalterada)
 # --------------------
 with tab2:
     st.write("Cole sua decklist abaixo (uma carta por linha):")
@@ -310,7 +330,6 @@ with tab2:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
 
-        # Botão centralizado
         c1, c2, c3 = st.columns([1, 1, 1])
         with c2:
             if st.button("📥 Adicionar lista ao Deckbuilder"):
@@ -320,7 +339,7 @@ with tab2:
                 st.success("Decklist adicionada ao Deckbuilder!")
 
 # --------------------
-# Tab 3 — Artes por tipo (tamanho FIXO) + +/- centralizado
+# Tab 3 — Artes (tamanho fixo, qty>4 vermelho, sumir ao zerar)
 # --------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
@@ -372,11 +391,9 @@ with tab3:
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
                 for col, (name, qty_init, _t, img, s_text, s_type) in zip(cols, row):
-                    # Quantidade ATUAL
                     qty = st.session_state.deck.get(name, 0)
                     if qty <= 0:
                         continue
-
                     with col:
                         card_ph = st.empty()
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
@@ -384,10 +401,7 @@ with tab3:
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
                         card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty>4)), unsafe_allow_html=True)
 
-                        # Barra +/- alinhada ao card fixo
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
-
-                        # Botões centralizados
                         left_sp, mid, right_sp = st.columns([1, 2, 1])
                         with mid:
                             minus_c, plus_c = st.columns([1, 1], gap="small")
@@ -404,14 +418,14 @@ with tab3:
                                 card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3", overlimit=(new_qty>4)), unsafe_allow_html=True)
                 st.markdown("---")
 
-        # Export (centralizado)
+        # Export
         lines = [f"{q}x {n}" for n, q in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
         d1, d2, d3 = st.columns([1, 1, 1])
         with d2:
             st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
 
 # --------------------
-# Tab 4 — Análise: Curva de mana & Subtipos
+# Tab 4 — Curva de Mana & Subtipos (com fix de CMC)
 # --------------------
 with tab4:
     st.subheader("📊 Analisador — Curva de Mana & Subtipos")
@@ -438,9 +452,8 @@ with tab4:
                 meta = list(ex.map(load_meta, names))
         df = pd.DataFrame(meta)
 
-        # ===== Curva de mana =====
+        # Curva de mana robusta (NaN/None amigável)
         st.markdown("### ⚡ Curva de Mana")
-        # Converte CMC de forma robusta (NaN/None -> NaN), arredonda e usa dtype Int64 (aceita NA)
         cmc_numeric = pd.to_numeric(df['cmc'], errors='coerce')
         df['cmc_i'] = cmc_numeric.round().astype('Int64')
         curve = (
@@ -460,17 +473,15 @@ with tab4:
         else:
             st.info("Não foi possível calcular a curva (sem CMC disponível nas cartas).")
 
-        # ===== Subtipos =====
+        # Subtipos
         st.markdown("### 🧩 Subtipos (quantidade & quais existem)")
         def extract_subtypes(tline:str):
             if not tline:
                 return []
-            # Divide em 'Types — Subtypes' (usa em-dash, ndash ou hyphen)
             parts = re.split(r'\s+[—\-–]\s+', tline)
             if len(parts) < 2:
                 return []
             subs = parts[1]
-            # separa por espaço ou barra e remove vazios
             tokens = [s.strip() for s in re.split(r'[\s/]+', subs) if s.strip() and s.lower() != '—']
             return tokens
 
@@ -484,7 +495,6 @@ with tab4:
             agg = dsubs.groupby('subtype', as_index=False)['qty'].sum().sort_values('qty', ascending=False)
             st.bar_chart(agg.set_index('subtype'))
 
-            # Tabela com lista de cartas por subtipo
             st.markdown("#### Detalhamento por subtipo")
             cards_by_sub = (
                 dsubs.groupby('subtype')['name']
