@@ -1,16 +1,12 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.5
+Romantic Format Tools — FINAL v18.5.1
 Autor: Victor + Copilot
 
-Mudanças nesta versão (v18.5):
-- **Cliques rápidos na Aba 3** usando o padrão *placeholder re-render* (sem `experimental_rerun`).
-  - Cada carta é renderizada em um `st.empty()` e, ao clicar ➖/➕, o placeholder da **própria carta** é atualizado
-    imediatamente dentro do mesmo run.
-- **Análise (Aba 4) preguiçosa**: só calcula quando você aciona o **toggle** dentro da aba, evitando custo
-  durante edições rápidas do deck na Aba 3.
-- Mantém os **símbolos de mana** no badge da Aba 3 e o **fix** do Altair nos donuts.
+Hotfix (v18.5.1):
+- Corrige NameError na Aba 1: adiciona a função `buscar_sugestoes` que faltou na v18.5.
+- Mantém: cliques rápidos na Aba 3 (placeholder re-render) e análise preguiçosa na Aba 4.
 """
 import re
 import time
@@ -52,6 +48,19 @@ if 'last_change' not in st.session_state: st.session_state.last_change = None
 if 'last_action' not in st.session_state: st.session_state.last_action = None
 
 # ===== Utilidades =====
+def buscar_sugestoes(query: str):
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    url = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(q)}"
+    try:
+        throttle(); r = SESSION.get(url, timeout=8)
+        if r.ok:
+            return r.json().get("data", [])
+    except Exception:
+        pass
+    return []
+
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name, _salt=','.join(sorted(allowed_sets))):
     safe_name = card_name.strip()
