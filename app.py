@@ -1,11 +1,10 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.8
-- Aba 3: número da quantidade fica VERMELHO quando > 4 cópias
-- Aba 3: tamanho FIXO de carta e remoção imediata quando qty == 0 (st.rerun)
-- Aba 4: Analisador de curva de mana + subtipos (quantidade por subtipo e quais existem no deck)
-- Mantém: botões centralizados e ajustes anteriores
+Romantic Format Tools - v13.8.1
+- Fix Aba 4: tratamento robusto de CMC (NaN/None) para evitar ValueError ao converter para inteiro
+- Aba 3: mantém quantidade >4 em vermelho, tamanho fixo e remoção imediata quando qty==0
+- Aba 4: Curva de Mana + Subtipos (com pandas/Altair)
 """
 import re
 import time
@@ -441,13 +440,13 @@ with tab4:
 
         # ===== Curva de mana =====
         st.markdown("### ⚡ Curva de Mana")
-        # Normaliza cmc (mana value) — usa inteiro arredondado para barras
-        df['cmc_i'] = df['cmc'].apply(lambda x: int(round(x)) if isinstance(x,(int,float)) else None)
+        # Converte CMC de forma robusta (NaN/None -> NaN), arredonda e usa dtype Int64 (aceita NA)
+        cmc_numeric = pd.to_numeric(df['cmc'], errors='coerce')
+        df['cmc_i'] = cmc_numeric.round().astype('Int64')
         curve = (
             df.dropna(subset=['cmc_i'])
-              .groupby('cmc_i')['qty']
+              .groupby('cmc_i', as_index=False)['qty']
               .sum()
-              .reset_index()
               .sort_values('cmc_i')
         )
         if not curve.empty:
@@ -472,7 +471,7 @@ with tab4:
                 return []
             subs = parts[1]
             # separa por espaço ou barra e remove vazios
-            tokens = [s.strip() for s in re.split(r'[\s/]+', subs) if s.strip()]
+            tokens = [s.strip() for s in re.split(r'[\s/]+', subs) if s.strip() and s.lower() != '—']
             return tokens
 
         rows = []
@@ -482,13 +481,16 @@ with tab4:
                 rows.append({'subtype': s, 'name': r['name'], 'qty': r['qty']})
         if rows:
             dsubs = pd.DataFrame(rows)
-            agg = dsubs.groupby('subtype')['qty'].sum().reset_index().sort_values('qty', ascending=False)
+            agg = dsubs.groupby('subtype', as_index=False)['qty'].sum().sort_values('qty', ascending=False)
             st.bar_chart(agg.set_index('subtype'))
 
             # Tabela com lista de cartas por subtipo
             st.markdown("#### Detalhamento por subtipo")
-            # cards por subtipo (únicos) e soma de cópias
-            cards_by_sub = dsubs.groupby('subtype').apply(lambda g: ", ".join(sorted(g['name'].unique()))).reset_index(name='Cartas')
+            cards_by_sub = (
+                dsubs.groupby('subtype')['name']
+                     .apply(lambda s: ", ".join(sorted(set(s))))
+                     .reset_index(name='Cartas')
+            )
             agg2 = agg.merge(cards_by_sub, on='subtype', how='left')
             st.dataframe(agg2.rename(columns={'subtype':'Subtipo','qty':'Cópias'}), use_container_width=True)
         else:
