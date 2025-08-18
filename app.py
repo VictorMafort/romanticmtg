@@ -1,10 +1,12 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.9
-- Aba 4: somente tabela de **Subtipos de Criaturas** (sem gráfico) + **distribuição de cores** + **fontes de mana por cor**
-- Mantém fixes anteriores: Aba 3 (qty>4 em vermelho, tamanho fixo, remover ao zerar),
-  busca Scryfall com codificação correta e botão para limpar cache
+Romantic Format Tools - v13.10
+- Aba 4:
+  * Tabela de subtipos (criaturas) **sem coluna de índice**
+  * **Gráficos circulares (donut)** para: distribuição de cores e fontes de mana (todas / só terrenos)
+- Aba 1: **corrigido suporte a cartas dupla-face** (DFC) como *Delver of Secrets* — busca imagem na primeira face quando `image_uris` não existe no nível raiz
+- Mantém: Aba 3 (qty>4 em vermelho, tamanho fixo, remover ao zerar), botão para limpar cache, query Scryfall codificada
 """
 import re
 import time
@@ -15,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # --------------------
 # Sessão HTTP + throttle
@@ -61,7 +64,10 @@ def buscar_sugestoes(query: str):
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
-    """Busca dados via Scryfall e retorna campos úteis para o app."""
+    """Busca dados via Scryfall.
+    * Corrige DFC: se não houver image_uris no topo, usa card_faces[0].image_uris
+    * Limita sets pelo allowed_sets para checar legalidade
+    """
     safe_name = card_name.strip()
     url_named = f"https://api.scryfall.com/cards/named?fuzzy={urllib.parse.quote(safe_name)}"
     try:
@@ -74,7 +80,24 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
     if "prints_search_uri" not in data:
         return None
 
-    # quick scan: restringe a allowed_sets
+    # --- imagem (inclui DFC) ---
+    def pick_image(card: dict):
+        # tenta raiz
+        img = (card.get("image_uris", {}) or {}).get("normal") or (card.get("image_uris", {}) or {}).get("small")
+        if img:
+            return img
+        # tenta primeira face (DFC / transform / modal)
+        faces = card.get("card_faces") or []
+        if faces and isinstance(faces, list):
+            for face in faces:
+                img2 = (face.get("image_uris", {}) or {}).get("normal") or (face.get("image_uris", {}) or {}).get("small")
+                if img2:
+                    return img2
+        return None
+
+    base_img = pick_image(data)
+
+    # --- quick scan por sets ---
     all_sets = set()
     set_query = " OR ".join(s.lower() for s in allowed_sets)
     q_str = f'!"{safe_name}" e:({set_query})'
@@ -90,11 +113,10 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
                     sc = (c.get("set") or "").upper()
                     if sc:
                         all_sets.add(sc)
-                # Monta o retorno usando o objeto base 'data' (named)
                 return {
                     "name": data.get("name", ""),
                     "sets": all_sets,
-                    "image": (data.get("image_uris", {}) or {}).get("normal") or (data.get("image_uris", {}) or {}).get("small"),
+                    "image": base_img,
                     "type": data.get("type_line", ""),
                     "cmc": data.get("cmc"),
                     "mana_cost": data.get("mana_cost"),
@@ -105,7 +127,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
     except Exception:
         pass
 
-    # fallback: varredura prints
+    # fallback varredura
     next_page = data["prints_search_uri"]
     while next_page:
         try:
@@ -130,7 +152,7 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
     return {
         "name": data.get("name", ""),
         "sets": all_sets,
-        "image": (data.get("image_uris", {}) or {}).get("normal") or (data.get("image_uris", {}) or {}).get("small"),
+        "image": base_img,
         "type": data.get("type_line", ""),
         "cmc": data.get("cmc"),
         "mana_cost": data.get("mana_cost"),
@@ -167,12 +189,10 @@ def remove_card(card_name, qty=1):
 # --------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# Sidebar utilitário
 with st.sidebar:
     st.markdown("### ⚙️ Utilitários")
     if st.button("🔄 Limpar cache de cartas"):
-        fetch_card_data.clear()
-        st.rerun()
+        fetch_card_data.clear(); st.rerun()
 
 st.markdown(
     """
@@ -228,7 +248,7 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
     """
 
 # --------------------
-# Tab 1 — Sugestões (igual)
+# Tab 1 — Sugestões
 # --------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:")
@@ -300,7 +320,7 @@ with tab2:
                 st.success("Decklist adicionada ao Deckbuilder!")
 
 # --------------------
-# Tab 3 — Artes (tamanho fixo, qty>4 vermelho, sumir ao zerar)
+# Tab 3 — Artes (igual, tamanho fixo, qty>4 vermelho, sumir ao zerar)
 # --------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
@@ -385,7 +405,7 @@ with tab3:
             st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
 
 # --------------------
-# Tab 4 — Análise: Subtipo (Criaturas), Distribuição de cores, Fontes de mana
+# Tab 4 — Análise
 # --------------------
 with tab4:
     st.subheader("📊 Análise do Deck")
@@ -414,12 +434,11 @@ with tab4:
                 meta = list(ex.map(load_meta, names))
         df = pd.DataFrame(meta)
 
-        # ====== 4.1 Subtipos DE CRIATURAS (tabela) ======
+        # ====== 4.1 Subtipos DE CRIATURAS (tabela, sem índice) ======
         st.markdown("### 🧩 Subtipos de **Criaturas**")
         def extract_subtypes(tline:str):
             if not tline or 'Creature' not in tline:
                 return []
-            # split por '—', '–' ou '-' (em torno de espaços)
             parts = re.split(r'\s+[—\-–]\s+', tline)
             if len(parts) < 2:
                 return []
@@ -436,7 +455,6 @@ with tab4:
                 rows.append({'Subtipo': s, 'Carta': r['name'], 'Cópias': int(r['qty'])})
         if rows:
             dsubs = pd.DataFrame(rows)
-            # Soma de cópias por subtipo e lista de cartas
             agg = dsubs.groupby('Subtipo', as_index=False)['Cópias'].sum().sort_values('Cópias', ascending=False)
             cards_by_sub = (
                 dsubs.groupby('Subtipo')['Carta']
@@ -444,59 +462,75 @@ with tab4:
                      .reset_index(name='Cartas')
             )
             tabela = agg.merge(cards_by_sub, on='Subtipo', how='left')
-            st.dataframe(tabela, use_container_width=True)
+            st.dataframe(tabela, use_container_width=True, hide_index=True)
         else:
             st.info("Nenhuma criatura com subtipo identificada no deck.")
 
-        # ====== 4.2 Distribuição de cores ======
+        # ====== Paleta de cores (padrão MTG) para os gráficos ======
+        color_map = {
+            'W':'#d6d3c2',  # "white" mais escuro p/ texto branco legível
+            'U':'#2b6cb0',  # blue
+            'B':'#1f2937',  # black (gray-800)
+            'R':'#c53030',  # red
+            'G':'#2f855a',  # green
+            'C':'#6b7280',  # colorless
+        }
+
+        # ====== 4.2 Distribuição de cores (donut) ======
         st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
-        # conta uma carta em cada cor presente na sua color_identity (multicolor conta em todas as cores)
         def has_color(ci, c):
             try:
                 return c in (ci or [])
             except Exception:
                 return False
-        color_letters = ['W','U','B','R','G']
+        letters = ['W','U','B','R','G','C']
         dist_rows = []
         total_copias = int(df['qty'].sum()) if not df.empty else 0
-        for c in color_letters:
-            qtd = int(df[df['color_identity'].apply(lambda x: has_color(x, c))]['qty'].sum())
-            pct = (qtd / total_copias * 100.0) if total_copias else 0.0
-            dist_rows.append({'Cor': c, 'Cópias (contagem por cor)': qtd, '% sobre o total*': round(pct,1)})
-        # Colorless (C): cartas sem nenhuma cor de identidade
-        qtd_c = int(df[df['color_identity'].apply(lambda x: not (x or []))]['qty'].sum())
-        pct_c = (qtd_c / total_copias * 100.0) if total_copias else 0.0
-        dist_rows.append({'Cor': 'C', 'Cópias (contagem por cor)': qtd_c, '% sobre o total*': round(pct_c,1)})
+        for c in letters:
+            if c == 'C':
+                qtd = int(df[df['color_identity'].apply(lambda x: not (x or []))]['qty'].sum())
+            else:
+                qtd = int(df[df['color_identity'].apply(lambda x: has_color(x, c))]['qty'].sum())
+            dist_rows.append({'Cor': c, 'Cópias': qtd})
         dist_df = pd.DataFrame(dist_rows)
-        st.dataframe(dist_df, use_container_width=True)
-        st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; por isso a soma das colunas pode exceder 100%.")
+        fig1 = px.pie(dist_df, values='Cópias', names='Cor', color='Cor',
+                      color_discrete_map=color_map, hole=0.55)
+        fig1.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
+        fig1.update_layout(showlegend=True, legend_title_text='Cor')
+        st.plotly_chart(fig1, use_container_width=True)
+        st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; a soma pode exceder 100%.")
 
-        # ====== 4.3 Fontes de mana por cor ======
+        # ====== 4.3 Fontes de mana (donuts lado a lado) ======
         st.markdown("### ⛲ Fontes de mana por cor")
-        # Considera qualquer permanente com produced_mana informado (terrenos, artefatos, criaturas que geram mana, etc.)
-        # Conta por cor a soma das cópias das cartas que conseguem produzir a respectiva cor
-        def produce(ci_list, c):
-            try:
-                return c in (ci_list or [])
-            except Exception:
-                return False
-        mana_letters = ['W','U','B','R','G','C']  # inclui incolor
-        src_rows = []
-        # todas as fontes (produced_mana presente)
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, (list, tuple)) and len(v) > 0)
         sources_df = df[is_source].copy()
-        for c in mana_letters:
-            qtd = int(sources_df[sources_df['produced_mana'].apply(lambda lst: produce(lst, c))]['qty'].sum())
-            src_rows.append({'Cor': c, 'Fontes (todas as permanentes)': qtd})
-        src_all_df = pd.DataFrame(src_rows)
-        # somente terrenos
-        land_mask = df['type_line'].apply(lambda t: isinstance(t, str) and ('Land' in t))
-        land_src_df = df[land_mask & is_source].copy()
-        land_rows = []
-        for c in mana_letters:
-            qtd = int(land_src_df[land_src_df['produced_mana'].apply(lambda lst: produce(lst, c))]['qty'].sum())
-            land_rows.append({'Cor': c, 'Fontes (somente terrenos)': qtd})
-        src_land_df = pd.DataFrame(land_rows)
-        # junta lado a lado
-        fontes_df = src_all_df.merge(src_land_df, on='Cor', how='outer').fillna(0).astype({'Fontes (todas as permanentes)':'int64','Fontes (somente terrenos)':'int64'})
-        st.dataframe(fontes_df.sort_values('Cor'), use_container_width=True)
+        land_src_df = df[is_source & df['type_line'].apply(lambda t: isinstance(t, str) and ('Land' in t))].copy()
+
+        def count_sources(dframe, letter):
+            def produces(lst):
+                try:
+                    return letter in (lst or [])
+                except Exception:
+                    return False
+            return int(dframe[dframe['produced_mana'].apply(produces)]['qty'].sum())
+
+        src_rows_all, src_rows_land = [], []
+        for c in letters:
+            src_rows_all.append({'Cor': c, 'Fontes': count_sources(sources_df, c)})
+            src_rows_land.append({'Cor': c, 'Fontes': count_sources(land_src_df, c)})
+        pie_all = pd.DataFrame(src_rows_all)
+        pie_land = pd.DataFrame(src_rows_land)
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.caption("Todas as permanentes")
+            fig2 = px.pie(pie_all, values='Fontes', names='Cor', color='Cor', color_discrete_map=color_map, hole=0.55)
+            fig2.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
+            fig2.update_layout(showlegend=False)
+            st.plotly_chart(fig2, use_container_width=True)
+        with col_b:
+            st.caption("Somente terrenos")
+            fig3 = px.pie(pie_land, values='Fontes', names='Cor', color='Cor', color_discrete_map=color_map, hole=0.55)
+            fig3.update_traces(textinfo='value', textposition='inside', insidetextfont=dict(color='white', size=14))
+            fig3.update_layout(showlegend=False)
+            st.plotly_chart(fig3, use_container_width=True)
