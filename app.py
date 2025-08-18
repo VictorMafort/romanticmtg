@@ -1,10 +1,10 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.6 (Tab 3 fixed max size)
-- Aba 1: mantém 3 por linha e limite dinâmico (como antes)
-- Aba 3: **tamanho máximo FIXO** por carta, alinhado com a barra de botões
-- Botões continuam centralizados (Aba 1, 2 e 3)
+Romantic Format Tools - v13.7 (Tab 3: remove card instantly when qty == 0)
+- Aba 3: cartas com quantidade 0 não rendem e somem imediatamente após o clique
+- Usa st.rerun() quando um botão reduz a quantidade a 0
+- Mantém: botões centralizados, tamanho FIXO na Aba 3 (--rf-card3-max)
 """
 import re
 import time
@@ -154,8 +154,7 @@ st.markdown(
       --rf-card-max: clamp(220px, var(--rf-card-max), 44vw);
 
       /* ===== Aba 3 (FIXO) ===== */
-      /* Ajuste aqui o tamanho máximo desejado para cada carta na Aba 3 */
-      --rf-card3-max: 300px; /* <- mude para 280px ou 320px se preferir */
+      --rf-card3-max: 300px; /* ajuste fino: 280px, 300px, 320px, etc. */
     }
 
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
@@ -181,7 +180,7 @@ st.markdown(
 
     /* Barra -/+ "sobre" a arte (Aba 3) -> alinhada ao tamanho FIXO */
     .rf-inart-belt{
-      max-width: var(--rf-card3-max);  /* <- usa o fixo da aba 3 */
+      max-width: var(--rf-card3-max);
       margin:-36px auto 8px; display:flex; justify-content:center; gap:10px; position:relative; z-index:20;
     }
 
@@ -348,30 +347,38 @@ with tab3:
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
                 for col, (name, qty_init, _t, img, s_text, s_type) in zip(cols, row):
+                    # Lê a quantidade ATUAL (após qualquer clique anterior) e evita renderizar se for 0
+                    qty = st.session_state.deck.get(name, 0)
+                    if qty <= 0:
+                        continue  # não renderiza card, nem barra, nem botões
+
                     with col:
                         card_ph = st.empty()
-                        qty = st.session_state.deck.get(name, 0)
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
                         legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
                         card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
 
-                        # Barra +/-: marcador visual para largura/posição (usa --rf-card3-max)
+                        # Barra +/- alinhada ao card fixo
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
 
-                        # Centraliza os dois botões no miolo
+                        # Botões centralizados
                         left_sp, mid, right_sp = st.columns([1, 2, 1])
                         with mid:
                             minus_c, plus_c = st.columns([1, 1], gap="small")
-                            clicked = False
                             if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
-                                remove_card(name, 1); clicked=True
+                                # remove 1 e, se zerou, rerun para sumir imediatamente
+                                remove_card(name, 1)
+                                if st.session_state.deck.get(name, 0) <= 0:
+                                    st.rerun()
+                                else:
+                                    # atualiza contador no mesmo run
+                                    new_qty = st.session_state.deck.get(name, 0)
+                                    card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
                             if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
-                                add_card(name, 1); clicked=True
-
-                        if clicked:
-                            qty2 = st.session_state.deck.get(name, 0)
-                            card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed3"), unsafe_allow_html=True)
+                                add_card(name, 1)
+                                new_qty = st.session_state.deck.get(name, 0)
+                                card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
                 st.markdown("---")
 
         # Export (centralizado)
