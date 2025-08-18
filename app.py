@@ -50,21 +50,19 @@ ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 # =========================
 # Utilidades
 # =========================
-def buscar_sugestoes(query):
+
+def buscar_sugestoes(query: str):
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    url = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(q)}"
     try:
-        # Prefixo primeiro
-        url_prefix = f"https://api.scryfall.com/cards/autocomplete?q=name:{urllib.parse.quote(query)}"
-        r = requests.get(url_prefix, timeout=8)
-        if r.status_code == 200:
-            data = [s for s in r.json().get("data", []) if "token" not in s.lower()]
-            if data:
-                return data
-        # Fallback geral
-        url_any = f"https://api.scryfall.com/cards/autocomplete?q={urllib.parse.quote(query)}"
-        r2 = requests.get(url_any, timeout=8)
-        if r2.status_code == 200:
-            return [s for s in r2.json().get("data", []) if "token" not in s.lower()]
-    except:
+        throttle()
+        r = SESSION.get(url, timeout=8)
+        if r.ok:
+            # por padrão include_extras=false (tokens e afins não entram)
+            return r.json().get("data", [])
+    except Exception:
         pass
     return []
 
@@ -384,6 +382,7 @@ with tab3:
 
     st.markdown("---")
     st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
