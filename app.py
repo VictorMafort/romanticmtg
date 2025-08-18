@@ -148,51 +148,71 @@ def check_legality(name, sets):
 # =========================
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS apenas para o grid de sugestões
 st.markdown("""
 <style>
-.sug-card {
-    position: relative;
+.rf-card {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12);
 }
-.overlay-btns {
-    position: absolute;
-    top: 20%;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    z-index: 5;
-    opacity: 0;
-    transition: opacity 0.2s ease;
+.rf-img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.sug-card:hover .overlay-btns {
-    opacity: 1;
+.rf-top {
+  position: absolute;
+  top: 8px; left: 8px; right: 8px;
+  display: flex;
+  justify-content: flex-start;
 }
-.btn-group {
-    display: flex;
-    border: 1px solid black;
-    border-radius: 4px;
-    overflow: hidden;
+.rf-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: .82rem;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
-.btn {
-    background-color: white;
-    color: black;
-    font-weight: bold;
-    font-size: 0.8em;
-    width: 38px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    border: none;
+.rf-success { color:#166534; background:#dcfce7; }
+.rf-warning { color:#92400e; background:#fef3c7; }
+.rf-danger  { color:#991b1b; background:#fee2e2; }
+
+.rf-bottom {
+  position: absolute;
+  left: 8px; right: 8px; bottom: 8px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
 }
-.btn:hover {
-    background-color: #e6e6e6;
+.rf-pill {
+  display: inline-flex;
+  gap: 6px;
+  background: rgba(255,255,255, .92);
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 999px;
+  padding: 4px 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
+.rf-btn {
+  display:inline-block;
+  min-width: 34px;
+  text-align:center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: #0f172a;
+  text-decoration: none;
+  background: white;
+  border: 1px solid rgba(0,0,0,.08);
+}
+.rf-btn:hover { background: #f1f5f9; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # Estado do deck
 if "deck" not in st.session_state:
@@ -426,6 +446,7 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
 
 
 
