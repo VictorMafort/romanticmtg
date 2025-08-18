@@ -525,3 +525,22 @@ with tab3:
         )
 
         st.caption("Dica: use a Aba 1 para pesquisar cartas e ajustá-las rapidamente no deck.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
