@@ -1,18 +1,22 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools - v13.7 (Tab 3: remove card instantly when qty == 0)
-- Aba 3: cartas com quantidade 0 não rendem e somem imediatamente após o clique
-- Usa st.rerun() quando um botão reduz a quantidade a 0
-- Mantém: botões centralizados, tamanho FIXO na Aba 3 (--rf-card3-max)
+Romantic Format Tools - v13.8
+- Aba 3: número da quantidade fica VERMELHO quando > 4 cópias
+- Aba 3: tamanho FIXO de carta e remoção imediata quando qty == 0 (st.rerun)
+- Aba 4: Analisador de curva de mana + subtipos (quantidade por subtipo e quais existem no deck)
+- Mantém: botões centralizados e ajustes anteriores
 """
 import re
 import time
 import urllib.parse
 from collections import deque, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+
 import requests
 import streamlit as st
+import pandas as pd
+import altair as alt
 
 # --------------------
 # Sessão HTTP + throttle
@@ -58,6 +62,9 @@ def buscar_sugestoes(query: str):
 
 @st.cache_data(show_spinner=False)
 def fetch_card_data(card_name):
+    """Busca dados principais da carta via Scryfall.
+    Retorna dict com: name, sets, image, type, cmc (mana value), mana_cost
+    """
     safe = urllib.parse.quote(card_name)
     url = f"https://api.scryfall.com/cards/named?fuzzy={safe}"
     try:
@@ -82,8 +89,11 @@ def fetch_card_data(card_name):
             return {
                 "name": data.get("name", ""),
                 "sets": all_sets,
+                # Preferir 'normal' com fallback 'small'
                 "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
                 "type": data.get("type_line", ""),
+                "cmc": data.get("cmc"),
+                "mana_cost": data.get("mana_cost"),
             }
     except Exception:
         pass
@@ -110,6 +120,8 @@ def fetch_card_data(card_name):
         "sets": all_sets,
         "image": data.get("image_uris", {}).get("normal") or data.get("image_uris", {}).get("small"),
         "type": data.get("type_line", ""),
+        "cmc": data.get("cmc"),
+        "mana_cost": data.get("mana_cost"),
     }
 
 def check_legality(name, sets):
@@ -146,15 +158,16 @@ st.markdown(
     :root{
       /* ===== Aba 1 (dinâmico ~ 3 por linha) ===== */
       --rf-container-w: min(1200px, calc(100vw - 6rem));
-      --rf-col-gap: 1.2rem;
-      --rf-col-pad: .35rem;
+      --rf-col-gap: 1.2rem;  /* gap aproximado */
+      --rf-col-pad: .35rem;  /* padding de coluna */
       --rf-card-max: calc(
         (var(--rf-container-w) - (2 * var(--rf-col-pad) * 3) - (2 * var(--rf-col-gap))) / 3
       );
       --rf-card-max: clamp(220px, var(--rf-card-max), 44vw);
 
       /* ===== Aba 3 (FIXO) ===== */
-      --rf-card3-max: 300px; /* ajuste fino: 280px, 300px, 320px, etc. */
+      --rf-card3-max: 300px; /* ajuste fino: 280px, 300px, 320px... */
+      --rf-overlimit: #ef4444; /* Vermelho para quando passar de 4 cópias */
     }
 
     .rf-card{ position:relative; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.12); }
@@ -166,14 +179,24 @@ st.markdown(
     /* Aba 3: tamanho FIXO máximo */
     .rf-fixed3{ max-width: var(--rf-card3-max); margin:0 auto; }
 
-    /* Chips/badges */
+    /* Nome/legenda */
     .rf-name-badge{
       position:absolute; left:50%; transform:translateX(-50%);
       top:40px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px;
       background:rgba(255,255,255,.96); color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
       white-space:nowrap; max-width:92%; overflow:hidden; text-overflow:ellipsis;
     }
-    .rf-qty-badge{ position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px; border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px); }
+
+    /* Quantidade */
+    .rf-qty-badge{
+      position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65);
+      color:#fff; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px;
+      border:1px solid rgba(255,255,255,.25); backdrop-filter:saturate(120%) blur(1px);
+    }
+    /* Quando passar de 4, só o número fica vermelho (mantém o fundo) */
+    .rf-qty-badge.rf-over{ color: var(--rf-overlimit) !important; }
+
+    /* Chips de legalidade */
     .rf-legal-chip{ display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-weight:800; font-size:11px; border:1px solid rgba(0,0,0,.08); }
     .rf-chip-warning{ color:#92400e; background:#fef3c7; border-color:#fde68a }
     .rf-chip-danger{ color:#991b1b; background:#fee2e2; border-color:#fecaca }
@@ -204,18 +227,21 @@ st.markdown(
 
 st.title("🧙 Romantic Format Tools")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)", "📊 Análise (curva & subtipos)"
+])
 
-# Helper HTML do card (permite classe extra)
+# Helper HTML do card (permite classe extra e flag de overlimit)
 
-def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "") -> str:
+def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", overlimit: bool = False) -> str:
     cls = f"rf-card {extra_cls}".strip()
     img_src = img_url or ""
+    qty_cls = "rf-qty-badge rf-over" if overlimit else "rf-qty-badge"
     return f"""
     <div class='{cls}'>
       <img src='{img_src}' class='rf-img'/>
       {overlay_html}
-      <div class='rf-qty-badge'>x{qty}</div>
+      <div class='{qty_cls}'>x{qty}</div>
     </div>
     """
 
@@ -241,7 +267,7 @@ with tab1:
                     ph = st.empty(); qty = st.session_state.deck.get(name, 0)
                     badge_cls = "rf-success" if status_type=="success" else ("rf-danger" if status_type=="danger" else "rf-warning")
                     badge = f"<div class='rf-name-badge {badge_cls}'>{status_text}</div>"
-                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                    ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
 
                     # Centraliza o grupo de botões usando colunas-espaçadoras
                     bcols = st.columns([1, 1, 1, 1, 1, 1], gap="small")
@@ -254,7 +280,7 @@ with tab1:
 
                     if clicked:
                         qty2 = st.session_state.deck.get(name,0)
-                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed"), unsafe_allow_html=True)
+                        ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed", overlimit=False), unsafe_allow_html=True)
 
 # --------------------
 # Tab 2 — Decklist Checker
@@ -347,17 +373,17 @@ with tab3:
                 row = group[i:i+cols_per_row]
                 cols = st.columns(len(row))
                 for col, (name, qty_init, _t, img, s_text, s_type) in zip(cols, row):
-                    # Lê a quantidade ATUAL (após qualquer clique anterior) e evita renderizar se for 0
+                    # Quantidade ATUAL
                     qty = st.session_state.deck.get(name, 0)
                     if qty <= 0:
-                        continue  # não renderiza card, nem barra, nem botões
+                        continue
 
                     with col:
                         card_ph = st.empty()
                         chip_class = "" if s_type=="success" else (" rf-chip-danger" if s_type=="danger" else " rf-chip-warning")
                         legal_html = f"<span class='rf-legal-chip{chip_class}'>" + ("Banned" if s_type=="danger" else ("Not Legal" if s_type=="warning" else "")) + "</span>" if s_type!="success" else ""
                         overlay = f"<div class='rf-name-badge'>{name}{legal_html}</div>"
-                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
+                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty>4)), unsafe_allow_html=True)
 
                         # Barra +/- alinhada ao card fixo
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
@@ -367,18 +393,16 @@ with tab3:
                         with mid:
                             minus_c, plus_c = st.columns([1, 1], gap="small")
                             if minus_c.button("➖", key=f"b_m1_{sec}_{i}_{name}"):
-                                # remove 1 e, se zerou, rerun para sumir imediatamente
                                 remove_card(name, 1)
                                 if st.session_state.deck.get(name, 0) <= 0:
                                     st.rerun()
                                 else:
-                                    # atualiza contador no mesmo run
                                     new_qty = st.session_state.deck.get(name, 0)
-                                    card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
+                                    card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3", overlimit=(new_qty>4)), unsafe_allow_html=True)
                             if plus_c.button("➕", key=f"b_p1_{sec}_{i}_{name}"):
                                 add_card(name, 1)
                                 new_qty = st.session_state.deck.get(name, 0)
-                                card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3"), unsafe_allow_html=True)
+                                card_ph.markdown(html_card(img, overlay, new_qty, extra_cls="rf-fixed3", overlimit=(new_qty>4)), unsafe_allow_html=True)
                 st.markdown("---")
 
         # Export (centralizado)
@@ -386,3 +410,86 @@ with tab3:
         d1, d2, d3 = st.columns([1, 1, 1])
         with d2:
             st.download_button("⬇️ Baixar deck (.txt)", "\n".join(lines), file_name="deck.txt", mime="text/plain")
+
+# --------------------
+# Tab 4 — Análise: Curva de mana & Subtipos
+# --------------------
+with tab4:
+    st.subheader("📊 Analisador — Curva de Mana & Subtipos")
+    if not st.session_state.deck:
+        st.info("Seu deck está vazio. Adicione cartas pela Aba 1 ou cole uma lista na Aba 2.")
+    else:
+        snap = dict(st.session_state.deck)
+        names = sorted(snap.keys(), key=lambda x: x.lower())
+
+        def load_meta(nm:str):
+            try:
+                d = fetch_card_data(nm)
+                return {
+                    'name': nm,
+                    'qty': snap.get(nm, 0),
+                    'cmc': (d.get('cmc') if d else None),
+                    'type_line': (d.get('type') if d else ''),
+                }
+            except Exception:
+                return {'name': nm, 'qty': snap.get(nm,0), 'cmc': None, 'type_line': ''}
+
+        with st.spinner("Calculando estatísticas..."):
+            with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
+                meta = list(ex.map(load_meta, names))
+        df = pd.DataFrame(meta)
+
+        # ===== Curva de mana =====
+        st.markdown("### ⚡ Curva de Mana")
+        # Normaliza cmc (mana value) — usa inteiro arredondado para barras
+        df['cmc_i'] = df['cmc'].apply(lambda x: int(round(x)) if isinstance(x,(int,float)) else None)
+        curve = (
+            df.dropna(subset=['cmc_i'])
+              .groupby('cmc_i')['qty']
+              .sum()
+              .reset_index()
+              .sort_values('cmc_i')
+        )
+        if not curve.empty:
+            chart = alt.Chart(curve).mark_bar(color='#60a5fa').encode(
+                x=alt.X('cmc_i:O', title='Mana Value (CMC)'),
+                y=alt.Y('qty:Q', title='Cópias no deck'),
+                tooltip=['cmc_i','qty']
+            ).properties(height=260)
+            st.altair_chart(chart, use_container_width=True)
+            st.dataframe(curve.rename(columns={'cmc_i':'CMC','qty':'Cópias'}), use_container_width=True)
+        else:
+            st.info("Não foi possível calcular a curva (sem CMC disponível nas cartas).")
+
+        # ===== Subtipos =====
+        st.markdown("### 🧩 Subtipos (quantidade & quais existem)")
+        def extract_subtypes(tline:str):
+            if not tline:
+                return []
+            # Divide em 'Types — Subtypes' (usa em-dash, ndash ou hyphen)
+            parts = re.split(r'\s+[—\-–]\s+', tline)
+            if len(parts) < 2:
+                return []
+            subs = parts[1]
+            # separa por espaço ou barra e remove vazios
+            tokens = [s.strip() for s in re.split(r'[\s/]+', subs) if s.strip()]
+            return tokens
+
+        rows = []
+        for _, r in df.iterrows():
+            subs = extract_subtypes(r['type_line'])
+            for s in subs:
+                rows.append({'subtype': s, 'name': r['name'], 'qty': r['qty']})
+        if rows:
+            dsubs = pd.DataFrame(rows)
+            agg = dsubs.groupby('subtype')['qty'].sum().reset_index().sort_values('qty', ascending=False)
+            st.bar_chart(agg.set_index('subtype'))
+
+            # Tabela com lista de cartas por subtipo
+            st.markdown("#### Detalhamento por subtipo")
+            # cards por subtipo (únicos) e soma de cópias
+            cards_by_sub = dsubs.groupby('subtype').apply(lambda g: ", ".join(sorted(g['name'].unique()))).reset_index(name='Cartas')
+            agg2 = agg.merge(cards_by_sub, on='subtype', how='left')
+            st.dataframe(agg2.rename(columns={'subtype':'Subtipo','qty':'Cópias'}), use_container_width=True)
+        else:
+            st.info("Nenhuma carta com subtipo foi encontrada no deck.")
