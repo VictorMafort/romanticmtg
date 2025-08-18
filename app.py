@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 Romantic Format Tools - sem hover e sem flash
-- Botões dentro do cartão, agrupados em pílulas abaixo da imagem
+- Botões dentro do cartão (usando apenas Streamlit columns), em pílulas abaixo da imagem
 - Badge de legalidade no CENTRO entre as pílulas (-1/+1) e (-4/+4)
-- Nada abre em outra aba (controles são st.button e CSS bloqueia <a> dentro do card)
+- Nada abre em outra aba (não há <a> nos cards)
 """
-
 import re
 import time
 import urllib.parse
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-
 import requests
 import streamlit as st
 
@@ -25,7 +23,6 @@ SESSION.headers.update(
         "Accept": "application/json;q=0.9,*/*;q=0.8",
     }
 )
-
 _last = deque(maxlen=10)
 
 def throttle():
@@ -55,7 +52,6 @@ allowed_sets = {
     "ISD","DKA","AVR",
     "M13",
 }
-
 ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
 
 # -------------------------
@@ -134,7 +130,6 @@ def fetch_card_data(card_name):
                 next_page = j.get("next_page")
         except Exception:
             break
-
     return {
         "name": data.get("name", ""),
         "sets": all_sets,
@@ -179,30 +174,45 @@ def remove_card(card_name, qty=1):
 # -------------------------
 st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
 
-# CSS (sem hover; badge no meio; anti-new-tab)
+# CSS (sem hover; badge central; sem wrappers HTML de card/controls)
 st.markdown(
     """
     <style>
-    .rf-card{position:relative;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.12);}
-    .rf-img{display:block;width:100%;height:auto;}
-
-    /* Barra inferior fixa (sem overlay/hover) */
-    .rf-controls{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin:8px;}
-    .rf-pill{display:flex;gap:.5rem;background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.12);border-radius:999px;padding:4px 6px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
-    .rf-pill div.stButton>button{min-width:48px;padding:2px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.08);background:white;color:#0f172a;font-weight:800}
-    .rf-pill div.stButton>button:hover{background:#f1f5f9}
+    /* Botões em formato de pílula */
+    div.stButton>button{
+        min-width:56px;
+        padding:4px 12px;
+        border-radius:999px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#0f172a;
+        font-weight:800;
+        box-shadow:0 1px 3px rgba(0,0,0,.08);
+    }
+    div.stButton>button:hover{ background:#f1f5f9 }
 
     /* Badge central */
-    .rf-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:700;font-size:.82rem;background:rgba(255,255,255,.92);color:#0f172a;box-shadow:0 1px 4px rgba(0,0,0,.15);border:1px solid rgba(0,0,0,.08)}
+    .rf-badge{
+        display:flex; align-items:center; justify-content:center;
+        height:36px; padding:0 12px; border-radius:999px;
+        font-weight:700; font-size:.82rem;
+        background:rgba(255,255,255,.92); color:#0f172a;
+        box-shadow:0 1px 4px rgba(0,0,0,.15);
+        border:1px solid rgba(0,0,0,.08);
+        margin: 4px 0;
+    }
     .rf-success{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .rf-warning{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .rf-danger{color:#991b1b;background:#fee2e2;border-color:#fecaca}
 
-    /* Failsafe: impedir cliques em <a> dentro do card */
-    .rf-card a{pointer-events:none !important}
+    /* Imagem com cantos arredondados e sombra (sem wrapper extra) */
+    [data-testid="stImage"] img{
+        display:block; width:100%; height:auto;
+        border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.12);
+    }
 
     /* Aba 3: botões menores */
-    .row-qty div.stButton>button{padding:2px 8px;border-radius:8px}
+    .row-qty div.stButton>button{ padding:2px 8px; border-radius:8px }
     </style>
     """,
     unsafe_allow_html=True,
@@ -213,11 +223,10 @@ st.title("🧙 Romantic Format Tools")
 tab1, tab2, tab3 = st.tabs(["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder"])
 
 # -------------------------
-# Tab 1 - Single Card Checker (sem hover)
+# Tab 1 - Single Card Checker
 # -------------------------
 with tab1:
     query = st.text_input("Digite o começo do nome da carta:", value="")
-
     thumbs = []
     if query.strip():
         sugestoes = buscar_sugestoes(query.strip())
@@ -236,37 +245,33 @@ with tab1:
         for i in range(0, len(thumbs), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, (nome, img, status_text, status_type) in enumerate(thumbs[i:i+cols_per_row]):
-                safe_id = re.sub(r"[^a-z0-9_-]", "-", nome.lower())
+                safe_id = re.sub(r"[^a-z0-9_\-]", "-", nome.lower())
                 with cols[j]:
-                    # Cartão: imagem
-                    st.markdown('<div class="rf-card">', unsafe_allow_html=True)
-                    st.markdown(f'<img src="{img}" class="rf-img" alt="{nome}"/>', unsafe_allow_html=True)
+                    # Imagem da carta
+                    st.image(img, use_column_width=True)
 
-                    # Barra inferior fixa: pílula esquerda, badge central, pílula direita
-                    st.markdown('<div class="rf-controls">', unsafe_allow_html=True)
-                    # Esquerda (-1 / +1)
-                    with st.container():
-                        st.markdown('<div class="rf-pill">', unsafe_allow_html=True)
-                        b1, b2 = st.columns(2)
-                        if b1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
+                    # Linha inferior: [-1 +1] | Badge | [-4 +4]
+                    left, mid, right = st.columns([1, 1, 1], gap="small")
+
+                    with left:
+                        c1, c2 = st.columns([1, 1], gap="small")
+                        if c1.button("−1", key=f"m1_{i}_{j}_{safe_id}"):
                             remove_card(nome, 1)
-                        if b2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
+                        if c2.button("+1", key=f"p1_{i}_{j}_{safe_id}"):
                             add_card(nome, 1)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    # Centro (badge)
-                    st.markdown(f'<span class="rf-badge {_badge_class(status_type)}">{status_text}</span>', unsafe_allow_html=True)
-                    # Direita (-4 / +4)
-                    with st.container():
-                        st.markdown('<div class="rf-pill">', unsafe_allow_html=True)
-                        b3, b4 = st.columns(2)
-                        if b3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
-                            remove_card(nome, 4)
-                        if b4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
-                            add_card(nome, 4)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)  # fim rf-controls
 
-                    st.markdown('</div>', unsafe_allow_html=True)  # fim rf-card
+                    with mid:
+                        st.markdown(
+                            f"<div class='rf-badge {_badge_class(status_type)}'>{status_text}</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    with right:
+                        c3, c4 = st.columns([1, 1], gap="small")
+                        if c3.button("−4", key=f"m4_{i}_{j}_{safe_id}"):
+                            remove_card(nome, 4)
+                        if c4.button("+4", key=f"p4_{i}_{j}_{safe_id}"):
+                            add_card(nome, 4)
 
 # -------------------------
 # Tab 2 - Decklist Checker
@@ -295,7 +300,7 @@ with tab2:
         with st.spinner("Checando decklist..."):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 results = list(executor.map(process_line, lines))
-        results = [r for r in results if r]
+            results = [r for r in results if r]
 
         st.subheader("📋 Resultados:")
         for name, qty, status_text, status_type, _ in results:
@@ -313,7 +318,6 @@ with tab2:
 # -------------------------
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck Atual")
-
     total_cartas = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total_cartas}")
 
@@ -330,13 +334,13 @@ with tab3:
                 add_card(card, 1)
             st.markdown("---")
 
-        if st.button("🗑️ Limpar Deck", key="clear_deck"):
-            st.session_state.deck.clear()
-            st.success("Deck limpo!")
-            st.session_state.last_change = None
-            st.session_state.last_action = None
-        st.markdown("---")
+    if st.button("🗑️ Limpar Deck", key="clear_deck"):
+        st.session_state.deck.clear()
+        st.success("Deck limpo!")
+        st.session_state.last_change = None
+        st.session_state.last_action = None
 
-        export_lines = [f"{qty}x {name}" for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
-        export_text = "\n".join(export_lines)
-        st.download_button("⬇️ Baixar deck (.txt)", data=export_text, file_name="deck.txt", mime="text/plain")
+    st.markdown("---")
+    export_lines = [f"{qty}x {name}" for name, qty in sorted(st.session_state.deck.items(), key=lambda x: x[0].lower())]
+    export_text = "\n".join(export_lines)
+    st.download_button("⬇️ Baixar deck (.txt)", data=export_text, file_name="deck.txt", mime="text/plain")
