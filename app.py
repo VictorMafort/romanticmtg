@@ -1,15 +1,13 @@
 
 # -*- coding: utf-8 -*-
 """
-Romantic Format Tools — FINAL v18.2
+Romantic Format Tools — FINAL v18.3
 Autor: Victor + Copilot
 
-Mudanças nesta versão (v18.2):
-- **Aba 3 (Deckbuilder)**: organiza layout dos cards e move os botões ➖/➕ para **baixo** de cada carta
-  (mais previsível e alinhado). Remove o container decorativo vazio e espaçamentos desnecessários.
-- **Botões compactos**: estilo circular e menor, para não "estourar" a grade.
-- **Símbolos de mana na Aba 3**: exibe a **identidade de cor** (⚪🔵⚫🔴🟢⬜️) junto ao nome no badge do topo da carta.
-- Mantém o fix do Altair (v18.1) nos gráficos de donut.
+Mudanças nesta versão (v18.3):
+- **Remove `st.experimental_rerun()`** dos botões da Aba 3 (não é necessário; o clique do botão já provoca rerun).
+- Mantém a organização da Aba 3 e os **símbolos de mana** no badge do topo.
+- Mantém o fix do Altair (donut) da v18.1.
 """
 import re
 import time
@@ -427,13 +425,10 @@ with tab3:
                                 new_q = max(0, st.session_state.deck.get(name,0) - 1)
                                 if new_q == 0:
                                     st.session_state.deck.pop(name, None)
-                                    st.experimental_rerun()
                                 else:
                                     st.session_state.deck[name] = new_q
-                                    st.experimental_rerun()
                             if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
                                 st.session_state.deck[name] = st.session_state.deck.get(name,0) + 1
-                                st.experimental_rerun()
 
             st.markdown("---")
 
