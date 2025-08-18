@@ -9,7 +9,7 @@ Principais features e correções:
 - Tab 2: **text area** para decklist + botão para enviar ao Deckbuilder.
 - Tab 3: **legalidade e quantidade dentro da carta**, tamanho **fixo**, **pula cartas sem imagem** (evita “invisíveis”), +/- estável.
 - Tab 4: análise com **donuts (Altair)** usando **ícones de mana** e **%** no rótulo, texto **centralizado**; 
-         cálculos **vetorizados** (explode+groupby) → muito mais rápido; 
+         cálculos **vetorizados** (explode+groupby) ? muito mais rápido; 
          tabela de **subtipos de criaturas** sem índice.
 - Geral: **DFC image fix** (usa `card_faces[0].image_uris` quando necessário), cache com **salt** das coleções, 
          **init seguro** do `session_state`, throttle + retry leve nas chamadas Scryfall.
@@ -32,6 +32,16 @@ if 'last_change' not in st.session_state:
     st.session_state.last_change = None
 if 'last_action' not in st.session_state:
     st.session_state.last_action = None
+
+# ==== Helpers de estado (callbacks imediatos) ====
+def _deck_apply(name: str, delta: int):
+    q = st.session_state.deck.get(name, 0) + delta
+    if q <= 0:
+        st.session_state.deck.pop(name, None)
+    else:
+        st.session_state.deck[name] = q
+    st.rerun()
+
 
 # --------------------
 # Sessão HTTP + throttle
@@ -177,18 +187,18 @@ def fetch_card_data(card_name, _legal_salt: str = _ALLOWED_FPRINT):
     }
 
 def check_legality(name, sets):
-    if name in ban_list: return "❌ Banned", "danger"
-    if sets & allowed_sets: return "✅ Legal", "success"
-    return "⚠️ Not Legal", "warning"
+    if name in ban_list: return "? Banned", "danger"
+    if sets & allowed_sets: return "? Legal", "success"
+    return "?? Not Legal", "warning"
 
 # --------------------
 # App + CSS (layout estável)
 # --------------------
-st.set_page_config(page_title="Romantic Format Tools", page_icon="🧙", layout="centered")
+st.set_page_config(page_title="Romantic Format Tools", page_icon="??", layout="centered")
 
 with st.sidebar:
-    st.markdown("### ⚙️ Utilitários")
-    if st.button("🔄 Limpar cache de cartas"):
+    st.markdown("### ?? Utilitários")
+    if st.button("?? Limpar cache de cartas"):
         fetch_card_data.clear(); st.rerun()
 
 st.markdown(
@@ -203,7 +213,7 @@ st.markdown(
       --rf-card1-max: 300px; /* ajuste fino */
 
       /* TAB 3 — tamanho fixo p/ galeria */
-      --rf-card3-max: 300px;
+      --rf-card3-max: calc((var(--rf-container-w) - (3 - 1) * var(--rf-col-gap) - 3 * (2 * var(--rf-col-pad))) / 3);
 
       --rf-overlimit: #ef4444;
     }
@@ -255,10 +265,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("🧙 Romantic Format Tools")
+st.title("?? Romantic Format Tools")
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)", "📊 Análise"
+    "?? Single Card Checker", "?? Decklist Checker", "?? Deckbuilder (artes)", "?? Análise"
 ])
 
 # Helper HTML do card
@@ -280,7 +290,7 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
 # --------------------
 with tab1:
     import html as _html
-    st.caption("Digite o começo do nome da carta e use +/− para ajustar no seu deck.")
+    st.caption("Digite o começo do nome da carta e use +/- para ajustar no seu deck.")
     query = st.text_input("Buscar carta:")
     COLS_TAB1 = 3
 
@@ -297,19 +307,24 @@ with tab1:
             cols = st.columns(min(COLS_TAB1, len(thumbs) - i))
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
                 with cols[j]:
-                    qty = st.session_state.deck.get(name, 0)
-                    label = "Banned" if status_type=="danger" else ("Not Legal" if status_type=="warning" else "Legal")
-                    chip_class = "" if status_type=="success" else (" rf-chip-danger" if status_type=="danger" else " rf-chip-warning")
-                    legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
-                    badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
-                    st.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1", overlimit=False), unsafe_allow_html=True)
+    base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
 
-                    bcols = st.columns([1,1,1,1,1,1], gap="small")
-                    base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
-                    if bcols[1].button("−4", key=f"{base_key}_m4"):
+    bcols = st.columns([1,1,1,1,1,1], gap="small")
+    bcols[1].button("-4", key=f"{base_key}_m4", on_click=_deck_apply, args=(name, -4))
+    bcols[2].button("-1", key=f"{base_key}_m1", on_click=_deck_apply, args=(name, -1))
+    bcols[3].button("+1", key=f"{base_key}_p1", on_click=_deck_apply, args=(name, +1))
+    bcols[4].button("+4", key=f"{base_key}_p4", on_click=_deck_apply, args=(name, +4))
+
+    qty = st.session_state.deck.get(name, 0)
+    label = "Banned" if status_type=="danger" else ("Not Legal" if status_type=="warning" else "Legal")
+    chip_class = "" if status_type=="success" else (" rf-chip-danger" if status_type=="danger" else " rf-chip-warning")
+    legal_chip = f"<span class='rf-legal-chip{chip_class}'>\{_html.escape(label)\}</span>"
+    badge = f"<div class='rf-name-badge'>\{legal_chip\}</div>"
+    st.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1", overlimit=False), unsafe_allow_html=True)
+:
                         st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0)-4)
                         if st.session_state.deck[name] == 0: del st.session_state.deck[name]
-                    if bcols[2].button("−1", key=f"{base_key}_m1"):
+                    if bcols[2].button("-1", key=f"{base_key}_m1"):
                         st.session_state.deck[name] = max(0, st.session_state.deck.get(name,0)-1)
                         if st.session_state.deck[name] == 0: del st.session_state.deck[name]
                     if bcols[3].button("+1", key=f"{base_key}_p1"):
@@ -321,7 +336,7 @@ with tab1:
 # TAB 2 — Decklist Checker (text area restaurada)
 # --------------------
 with tab2:
-    st.subheader("📦 Decklist Checker")
+    st.subheader("?? Decklist Checker")
     st.write("Cole sua decklist abaixo (1 por linha). Formatos aceitos: `4x Nome`, `4 Nome`, `Nome`.")
     deck_input = st.text_area("Decklist", height=260, key="deck_text_area")
 
@@ -329,10 +344,10 @@ with tab2:
         line = re.sub(r'#.*$', '', line).strip()
         if not line: return None
         m = re.match(r'^(SB:)?\s*(\d+)?\s*x?\s*(.+)$', line, re.IGNORECASE)
-        if not m: return (line, 1, "❌ Card not found or API error", "danger", None)
+        if not m: return (line, 1, "? Card not found or API error", "danger", None)
         qty = int(m.group(2) or 1); name_guess = m.group(3).strip()
         card = fetch_card_data(name_guess)
-        if not card: return (name_guess, qty, "❌ Card not found or API error", "danger", None)
+        if not card: return (name_guess, qty, "? Card not found or API error", "danger", None)
         status_text, status_type = check_legality(card["name"], card.get("sets", set()))
         return (card["name"], qty, status_text, status_type, card.get("sets", set()))
 
@@ -346,7 +361,7 @@ with tab2:
             color = {"success":"green","warning":"orange","danger":"red"}[status_type]
             st.markdown(f"{qty}x {name}: <span style='color:{color}'>{status_text}</span>", unsafe_allow_html=True)
         st.markdown("---")
-        if st.button("📥 Enviar ao Deckbuilder"):
+        if st.button("?? Enviar ao Deckbuilder"):
             for name, qty, status_text, status_type, _ in results:
                 if status_type != "danger":
                     st.session_state.deck[name] = st.session_state.deck.get(name,0) + qty
@@ -356,8 +371,8 @@ with tab2:
 # TAB 3 — Deckbuilder (artes) — overlay e qty DENTRO da carta
 # --------------------
 with tab3:
-    st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
-    cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
+    st.subheader("????? Seu Deck — artes por tipo")
+    cols_per_row = 6  # fixo; cap visual controlado por CSS (--rf-card3-max)
     total = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total}")
 
@@ -418,24 +433,17 @@ with tab3:
 
                         st.markdown("<div class='rf-inart-belt'></div>", unsafe_allow_html=True)
                         mcol, pcol = st.columns([1,1])
-                        if mcol.button("➖", key=f"m1_{sec}_{i}_{name}"):
-                            new = max(0, st.session_state.deck.get(name,0)-1)
-                            if new==0:
-                                del st.session_state.deck[name]
-                                st.rerun()
-                            else:
-                                st.session_state.deck[name] = new
-                        if pcol.button("➕", key=f"p1_{sec}_{i}_{name}"):
-                            st.session_state.deck[name] = st.session_state.deck.get(name,0)+1
-                st.markdown("---")
+                        mcol.button("?", key=f"m1_{sec}_{i}_{name}", on_click=_deck_apply, args=(name, -1))
+                        pcol.button("?", key=f"p1_{sec}_{i}_{name}", on_click=_deck_apply, args=(name, +1))
+st.markdown("---")
         if skipped:
-            st.caption(f"ℹ️ {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
+            st.caption(f"?? {skipped} carta(s) não renderizada(s) por falta de imagem (cache repovoa em seguida).")
 
 # --------------------
 # TAB 4 — Análise (donuts vetorizados, ícones e %)
 # --------------------
 with tab4:
-    st.subheader("📊 Análise do Deck")
+    st.subheader("?? Análise do Deck")
     if not st.session_state.deck:
         st.info("Seu deck está vazio. Adicione cartas nas Abas 1/2/3.")
     else:
@@ -461,7 +469,7 @@ with tab4:
         df = pd.DataFrame(meta)
 
         # ===== Subtipos de Criaturas =====
-        st.markdown("### 🧩 Subtipos de **Criaturas**")
+        st.markdown("### ?? Subtipos de **Criaturas**")
         def extract_subtypes(tline:str):
             if not tline or 'Creature' not in tline: return []
             parts = re.split(r'\s+[—\-–]\s+', tline)
@@ -483,7 +491,7 @@ with tab4:
 
         # ===== Donuts: ícones + % centralizado, cálculo vetorizado =====
         letters = ['W','U','B','R','G','C']
-        mana_icons = {'W':'⚪','U':'🔵','B':'⚫','R':'🔴','G':'🟢','C':'⬜️'}
+        mana_icons = {'W':'?','U':'??','B':'?','R':'??','G':'??','C':'??'}
         color_map  = {'W':'#d6d3c2','U':'#2b6cb0','B':'#1f2937','R':'#c53030','G':'#2f855a','C':'#6b7280'}
 
         def build_donut_df(values: dict, label='Cor', val_name='Valor'):
@@ -493,27 +501,47 @@ with tab4:
             dfx['label_text'] = dfx.apply(lambda r: f"{mana_icons[r[label]]} {int(r[val_name])} ({r['pct']:.1f}%)", axis=1)
             return dfx
 
-        def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str):
-            dff = df_vals[df_vals[value_col] > 0].copy()
-            if dff.empty:
-                return alt.Chart(pd.DataFrame({'v':[1]})).mark_text(text='(vazio)').properties(height=200)
-            base = alt.Chart(dff)
-            chart = (
-                base.transform_calculate(
-                        textColor=f"indexof(['W','C'], toString(datum.{label_col})) >= 0 ? 'black' : 'white'"
-                    )
-                    .encode(
-                        theta=alt.Theta(field=value_col, type='quantitative'),
-                        color=alt.Color(field=label_col, type='nominal', scale=alt.Scale(domain=letters, range=[color_map[k] for k in letters]), legend=alt.Legend(title=None)),
-                        tooltip=[alt.Tooltip(label_col, title='Cor'), alt.Tooltip(value_col, title='Qtd'), alt.Tooltip('pct:Q', title='%')]
-                    )
-            )
-            arc = chart.mark_arc(innerRadius=70, outerRadius=120)
-            txt = chart.mark_text(radius=95, size=12, align='center', baseline='middle').encode(text='label_text:N', color=alt.Color('textColor:N', scale=None))
-            return (arc + txt).properties(height=320)
+        def donut_altair(df_vals: pd.DataFrame, label_col: str, value_col: str, legend_counts: dict | None = None, title: str | None = None):
+    dff = df_vals[df_vals[value_col] > 0].copy()
+    if dff.empty:
+        return alt.Chart(pd.DataFrame({'v':[1]})).mark_text(text='(vazio)').properties(height=200)
+    # Legenda com contagens
+    legend = alt.Legend(title=title)
+    if legend_counts is not None:
+        parts = []
+        letters = ['W','U','B','R','G','C']
+        mana_icons = {'W':'?','U':'??','B':'?','R':'??','G':'??','C':'??'}
+        for k in letters:
+            parts.append(f"(datum.label === '{k}') ? '{mana_icons[k]} {k} ({int(legend_counts.get(k,0))})'")
+        label_expr = " : ".join(parts + ["datum.label"])
+        legend = alt.Legend(title=title, labelExpr=label_expr)
+    color_map = {'W':'#d6d3c2','U':'#2b6cb0','B':'#1f2937','R':'#c53030','G':'#2f855a','C':'#6b7280'}
+    letters = ['W','U','B','R','G','C']
+    base = alt.Chart(dff)
+    enc = dict(
+        theta=alt.Theta(field=value_col, type='quantitative', stack=True),
+        color=alt.Color(field=label_col, type='nominal',
+                        scale=alt.Scale(domain=letters, range=[color_map[k] for k in letters]),
+                        legend=legend),
+        order=alt.Order(f'{label_col}:N', sort=letters),
+        tooltip=[alt.Tooltip(label_col, title='Cor'), alt.Tooltip(value_col, title='Qtd'), alt.Tooltip('pct:Q', title='%')]
+    )
+    inner, outer = 70, 120
+    mid = (inner + outer) // 2
+    arc = base.encode(**enc).mark_arc(innerRadius=inner, outerRadius=outer)
+    txt = (
+        base
+        .encode(**enc)
+        .transform_calculate(midAngle="(datum.startAngle + datum.endAngle)/2")
+        .mark_text(radius=mid, align='center', baseline='middle', dy=0)
+        .encode(theta="midAngle:Q", text='label_text:N')
+        .transform_calculate(textColor="indexof(['W','C'], toString(datum." + label_col + ")) >= 0 ? 'black' : 'white'")
+        .encode(color=alt.Color('textColor:N', scale=None))
+    )
+    return (arc + txt).properties(height=320)
 
-        # 🎨 Distribuição de cores
-        st.markdown("### 🎨 Distribuição de cores (por **identidade de cor**)")
+        # ?? Distribuição de cores
+        st.markdown("### ?? Distribuição de cores (por **identidade de cor**)")
         ci_df = df[['qty','color_identity']].copy()
         ci_df['color_identity'] = ci_df['color_identity'].apply(lambda x: x if isinstance(x, list) else [])
         ex = ci_df.explode('color_identity')
@@ -523,11 +551,11 @@ with tab4:
         colorless_qty = int(df[df['color_identity'].apply(lambda x: not bool(x))]['qty'].sum())
         dist_vals['C'] += colorless_qty
         dist_df = build_donut_df(dist_vals, val_name='Cópias')
-        st.altair_chart(donut_altair(dist_df, 'Cor', 'Cópias'), use_container_width=True)
+        st.altair_chart(donut_altair(dist_df, 'Cor', 'Cópias', legend_counts=dist_vals), use_container_width=True)
         st.caption("* Cartas multicoloridas contam em **cada** cor que possuem; por isso as % podem somar >100%.")
 
-        # ⛲ Fontes de mana
-        st.markdown("### ⛲ Fontes de mana por cor")
+        # ? Fontes de mana
+        st.markdown("### ? Fontes de mana por cor")
         is_source = df['produced_mana'].apply(lambda v: isinstance(v, list) and len(v) > 0)
         sources_df = df.loc[is_source, ['qty','type_line','produced_mana']].copy()
         # Todas
@@ -556,9 +584,9 @@ with tab4:
         c1, c2 = st.columns(2)
         with c1:
             st.caption("Todas as permanentes")
-            st.altair_chart(donut_altair(pie_all, 'Cor', 'Fontes'), use_container_width=True)
+            st.altair_chart(donut_altair(pie_all, 'Cor', 'Fontes', legend_counts=vals_all), use_container_width=True)
         with c2:
             st.caption("Somente terrenos")
-            st.altair_chart(donut_altair(pie_land, 'Cor', 'Fontes'), use_container_width=True)
+            st.altair_chart(donut_altair(pie_land, 'Cor', 'Fontes', legend_counts=vals_land), use_container_width=True)
 
-        st.markdown("**Legenda:** ⚪ W &nbsp;&nbsp; 🔵 U &nbsp;&nbsp; ⚫ B &nbsp;&nbsp; 🔴 R &nbsp;&nbsp; 🟢 G &nbsp;&nbsp; ⬜️ C")
+        st.markdown("**Legenda:** ? W &nbsp;&nbsp; ?? U &nbsp;&nbsp; ? B &nbsp;&nbsp; ?? R &nbsp;&nbsp; ?? G &nbsp;&nbsp; ?? C")
