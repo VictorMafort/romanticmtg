@@ -314,11 +314,10 @@ with tab2:
             st.success("Deck adicionado na Aba 3.")
 
 # =====================================================================
-# TAB 3 — Deckbuilder (artes)
+# TAB 3 — Deckbuilder com 3 colunas fixas
 # =====================================================================
 with tab3:
-    st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
-    cols_per_row = st.slider("Colunas por linha", 4, 8, 6)
+    st.subheader("🧙‍♂️ Deck")
     total = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total}")
 
@@ -345,6 +344,7 @@ with tab3:
             except Exception:
                 return (nm, snap.get(nm, 0), '', None, '', 'warning', [])
 
+        from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=min(8, max(1, len(names)))) as ex:
             items = list(ex.map(load_one, names))
 
@@ -359,11 +359,15 @@ with tab3:
             if 'Artifact' in tl: return 'Artefatos'
             return 'Outros'
 
+        from collections import defaultdict
         buckets = defaultdict(list)
         for name, qty0, tline, img, s_text, s_type, ci in items:
             buckets[bucket(tline)].append((name, qty0, tline, img, s_text, s_type, ci))
 
-        order = ["Criaturas", "Instantâneas", "Feitiços", "Artefatos", "Encantamentos", "Planeswalkers", "Terrenos", "Outros"]
+        order = [
+            "Criaturas", "Instantâneas", "Feitiços", "Artefatos",
+            "Encantamentos", "Planeswalkers", "Terrenos", "Outros"
+        ]
         mana_icons = {'W':'⚪','U':'🔵','B':'⚫','R':'🔴','G':'🟢','C':'⬜️'}
 
         for sec in order:
@@ -371,15 +375,20 @@ with tab3:
                 continue
             group = buckets[sec]
             st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _, _ in group)}")
-            for i in range(0, len(group), cols_per_row):
-                row = group[i:i+cols_per_row]
-                cols = st.columns(len(row))
+
+            # Agora sempre 3 colunas fixas
+            for i in range(0, len(group), 3):
+                row = group[i:i+3]
+                cols = st.columns(3)
                 for col, (name, _q0, _t, img, s_text, s_type, ci) in zip(cols, row):
                     with col:
                         qty = st.session_state.deck.get(name, 0)
                         if qty <= 0 or not img:
                             continue
-                        chip_class = "" if s_type == "success" else (" rf-chip-danger" if s_type == "danger" else " rf-chip-warning")
+
+                        chip_class = "" if s_type == "success" else (
+                            " rf-chip-danger" if s_type == "danger" else " rf-chip-warning"
+                        )
                         legal_html = (
                             f"<span class='rf-legal-chip{chip_class}'>" +
                             ("Banned" if s_type == "danger" else ("Not Legal" if s_type == "warning" else "")) +
@@ -389,7 +398,10 @@ with tab3:
                         overlay = f"<div class='rf-name-badge'><span class='rf-ci'>{ci_strip}</span>{name}{legal_html}</div>"
 
                         card_ph = st.empty()
-                        card_ph.markdown(html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)), unsafe_allow_html=True)
+                        card_ph.markdown(
+                            html_card(img, overlay, qty, extra_cls="rf-fixed3", overlimit=(qty > 4)),
+                            unsafe_allow_html=True
+                        )
 
                         minus_c, plus_c = st.columns([1, 1])
                         clicked = False
@@ -399,7 +411,11 @@ with tab3:
                             add_card(name, 1); clicked=True
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
-                            card_ph.markdown(html_card(img, overlay, qty2, extra_cls="rf-fixed3", overlimit=(qty2 > 4)), unsafe_allow_html=True)
+                            card_ph.markdown(
+                                html_card(img, overlay, qty2, extra_cls="rf-fixed3", overlimit=(qty2 > 4)),
+                                unsafe_allow_html=True
+                            )
+
             st.markdown("---")
 
 # =====================================================================
@@ -608,6 +624,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
