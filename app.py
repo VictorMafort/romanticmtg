@@ -21,6 +21,24 @@ import requests
 import streamlit as st
 import pandas as pd
 import altair as alt
+# =========================================================
+# CSS global — centralização dos botões do Deckbuilder
+# =========================================================
+st.markdown("""
+    <style>
+        .rf-btn-row {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .rf-btn-row button {
+            padding: 2px 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # ===== Sessão HTTP + throttle =====
 SESSION = requests.Session()
@@ -317,7 +335,7 @@ with tab2:
 # TAB 3 — Deckbuilder com 3 colunas fixas
 # =====================================================================
 with tab3:
-    st.subheader("🧙‍♂️ Deck")
+    st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
     total = sum(st.session_state.deck.values())
     st.markdown(f"**Total de cartas:** {total}")
 
@@ -376,8 +394,7 @@ with tab3:
             group = buckets[sec]
             st.markdown(f"### {sec} — {sum(q for _, q, _, _, _, _, _ in group)}")
 
-            # Agora sempre 3 colunas fixas
-            for i in range(0, len(group), 3):
+            for i in range(0, len(group), 3):  # sempre 3 colunas
                 row = group[i:i+3]
                 cols = st.columns(3)
                 for col, (name, _q0, _t, img, s_text, s_type, ci) in zip(cols, row):
@@ -403,12 +420,17 @@ with tab3:
                             unsafe_allow_html=True
                         )
 
-                        minus_c, plus_c = st.columns([1, 1])
+                        # Botões centralizados via CSS
+                        st.markdown("<div class='rf-btn-row'>", unsafe_allow_html=True)
                         clicked = False
-                        if minus_c.button("➖", key=f"m1_{sec}_{i}_{name}"):
-                            remove_card(name, 1); clicked=True
-                        if plus_c.button("➕", key=f"p1_{sec}_{i}_{name}"):
-                            add_card(name, 1); clicked=True
+                        if st.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                            remove_card(name, 1)
+                            clicked = True
+                        if st.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                            add_card(name, 1)
+                            clicked = True
+                        st.markdown("</div>", unsafe_allow_html=True)
+
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
                             card_ph.markdown(
@@ -417,6 +439,7 @@ with tab3:
                             )
 
             st.markdown("---")
+
 
 # =====================================================================
 # TAB 4 — Análise (preguiçosa)
@@ -624,6 +647,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
