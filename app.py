@@ -583,11 +583,10 @@ with tab5:
     st.subheader("⛔ Cartas Banidas")
 
     if ban_list:
-        cols = st.columns(4)  # Ajuste o número de colunas
+        cols = st.columns(4)
         for idx, card in enumerate(sorted(ban_list)):
             clean_name = card.strip()
 
-            # Busca usando fuzzy para garantir retorno
             import requests
             from urllib.parse import quote
             url = f"https://api.scryfall.com/cards/named?fuzzy={quote(clean_name)}"
@@ -606,9 +605,10 @@ with tab5:
 
             with cols[idx % 4]:
                 if img_url:
-                    st.image(img_url, use_column_width=True)
+                    st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
