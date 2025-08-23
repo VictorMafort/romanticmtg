@@ -220,9 +220,7 @@ st.markdown(
 st.title("🧙 Romantic Format Tools")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     ["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder", "📊 Statics", "⛔ Banlist"]
-
-
-])
+)
 
 # ===== helper =====
 def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", overlimit: bool = False) -> str:
@@ -601,3 +599,4 @@ with tab4:
                 st.markdown(f"- **{card}** (imagem não encontrada)")
     else:
         st.info("Nenhuma carta banida no momento.")
+
