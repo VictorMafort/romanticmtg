@@ -579,26 +579,6 @@ with tab4:
 # =========================
 # Aba 5 - Banlist com imagens (busca flexível)
 # =========================
-with tab5:
-    st.subheader("⛔ Cartas Banidas")
-
-    if ban_list:
-        cols = st.columns(4)
-        for idx, card in enumerate(sorted(ban_list)):
-            clean_name = card.strip()
-            card_data = fetch_card_data_flexible(clean_name)
-
-            with cols[idx % 4]:
-                if card_data and card_data.get('image_url'):
-                    st.image(
-                        card_data['image_url'],
-                        caption=card_data['name'],
-                        use_column_width=True
-                    )
-                else:
-                    st.markdown(f"**{clean_name}**\n_(imagem não encontrada)_")
-    else:
-        st.info("Nenhuma carta banida no momento.")
 
 
 
