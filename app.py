@@ -218,8 +218,10 @@ st.markdown(
 )
 
 st.title("🧙 Romantic Format Tools")
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder (artes)", "📊 Análise"
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["🔍 Single Card Checker", "📦 Decklist Checker", "🧙 Deckbuilder", "📊 Statics", "⛔ Banlist"]
+
+
 ])
 
 # ===== helper =====
@@ -575,3 +577,27 @@ with tab4:
                 st.caption("Somente terrenos")
                 st.altair_chart(donut_altair(pie_land, 'Cor', 'Fontes', legend_counts=vals_land), use_container_width=True)
             st.markdown("**Legenda:** ⚪ W 🔵 U ⚫ B 🔴 R 🟢 G ⬜️ C")
+
+# =========================
+# Tab 5 - Banlist com Imagens
+# =========================
+# =========================
+# Tab 4 - Banlist com Imagens
+# =========================
+with tab4:
+    st.subheader("⛔ Cartas Banidas")
+
+    if ban_list:
+        for card in sorted(ban_list):
+            # Busca dados da carta (incluindo imagem)
+            card_data = fetch_card_data(card)
+            if card_data and 'image_url' in card_data:
+                st.image(
+                    card_data['image_url'],
+                    caption=card,
+                    width=200
+                )
+            else:
+                st.markdown(f"- **{card}** (imagem não encontrada)")
+    else:
+        st.info("Nenhuma carta banida no momento.")
