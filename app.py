@@ -583,18 +583,25 @@ with tab5:
     st.subheader("⛔ Cartas Banidas")
 
     if ban_list:
-        for card in sorted(ban_list):
-            # Busca dados da carta (incluindo imagem)
-            card_data = fetch_card_data(card)
-            if card_data and 'image_url' in card_data:
-                st.image(
-                    card_data['image_url'],
-                    caption=card,
-                    width=200
-                )
-            else:
-                st.markdown(f"- **{card}** (imagem não encontrada)")
+        cols = st.columns(4)  # 4 por linha
+        for idx, card in enumerate(sorted(ban_list)):
+            # Remove espaços extras, quebras de linha e normaliza
+            clean_name = card.strip()
+            st.write(f"🔍 Buscando: `{clean_name}`")  # opcional para debug
+
+            card_data = fetch_card_data(clean_name)
+
+            with cols[idx % 4]:
+                if card_data and 'image_url' in card_data and card_data['image_url']:
+                    st.image(
+                        card_data['image_url'],
+                        caption=clean_name,
+                        use_column_width=True
+                    )
+                else:
+                    st.markdown(f"**{clean_name}**\n_(imagem não encontrada)_")
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
