@@ -335,6 +335,9 @@ with tab2:
 # =====================================================================
 # TAB 3 — Deckbuilder (artes) — 3 colunas fixas + botões centralizados
 # =====================================================================
+# =====================================================================
+# TAB 3 — Deckbuilder (artes) — 3 colunas fixas + botões centralizados
+# =====================================================================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
     total = sum(st.session_state.deck.values())
@@ -422,15 +425,16 @@ with tab3:
                         )
 
                         # Botões lado a lado centralizados
-                        st.markdown("<div class='rf-btn-row'>", unsafe_allow_html=True)
-                        clicked = False
-                        if st.button("➖", key=f"m1_{sec}_{i}_{name}"):
-                            remove_card(name, 1)
-                            clicked = True
-                        if st.button("➕", key=f"p1_{sec}_{i}_{name}"):
-                            add_card(name, 1)
-                            clicked = True
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        empty_left, btns, empty_right = st.columns([1, 2, 1])
+                        with btns:
+                            b1, b2 = st.columns(2)
+                            clicked = False
+                            if b1.button("➖", key=f"m1_{sec}_{i}_{name}"):
+                                remove_card(name, 1)
+                                clicked = True
+                            if b2.button("➕", key=f"p1_{sec}_{i}_{name}"):
+                                add_card(name, 1)
+                                clicked = True
 
                         if clicked:
                             qty2 = st.session_state.deck.get(name, 0)
@@ -647,6 +651,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
