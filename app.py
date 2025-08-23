@@ -312,22 +312,21 @@ with tab1:
                     card_ph = st.empty()
                     card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1"), unsafe_allow_html=True)
 
-                    # Linha de botões centralizados e lado a lado
-                    st.markdown("<div class='aba1-btn-row'>", unsafe_allow_html=True)
+                    # Botões lado a lado com columns (estável no Streamlit)
+                    bcols = st.columns([1, 1, 1, 1], gap="small")
                     clicked = False
-                    if st.button("−4", key=f"{base_key}_m4"):
-                        remove_card(name, 4)
-                        clicked = True
-                    if st.button("−1", key=f"{base_key}_m1"):
-                        remove_card(name, 1)
-                        clicked = True
-                    if st.button("+1", key=f"{base_key}_p1"):
-                        add_card(name, 1)
-                        clicked = True
-                    if st.button("+4", key=f"{base_key}_p4"):
-                        add_card(name, 4)
-                        clicked = True
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    with bcols[0]:
+                        if st.button("−4", key=f"{base_key}_m4"):
+                            remove_card(name, 4); clicked = True
+                    with bcols[1]:
+                        if st.button("−1", key=f"{base_key}_m1"):
+                            remove_card(name, 1); clicked = True
+                    with bcols[2]:
+                        if st.button("+1", key=f"{base_key}_p1"):
+                            add_card(name, 1); clicked = True
+                    with bcols[3]:
+                        if st.button("+4", key=f"{base_key}_p4"):
+                            add_card(name, 4); clicked = True
 
                     if clicked:
                         qty2 = st.session_state.deck.get(name, 0)
@@ -686,6 +685,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
