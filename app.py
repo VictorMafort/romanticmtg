@@ -577,31 +577,29 @@ with tab4:
             st.markdown("**Legenda:** ⚪ W 🔵 U ⚫ B 🔴 R 🟢 G ⬜️ C")
 
 # =========================
-# Tab 5 - Banlist com Imagens
+# Aba 5 - Banlist com imagens (busca flexível)
 # =========================
 with tab5:
     st.subheader("⛔ Cartas Banidas")
 
     if ban_list:
-        cols = st.columns(4)  # 4 por linha
+        cols = st.columns(4)
         for idx, card in enumerate(sorted(ban_list)):
-            # Remove espaços extras, quebras de linha e normaliza
             clean_name = card.strip()
-            st.write(f"🔍 Buscando: `{clean_name}`")  # opcional para debug
-
-            card_data = fetch_card_data(clean_name)
+            card_data = fetch_card_data_flexible(clean_name)
 
             with cols[idx % 4]:
-                if card_data and 'image_url' in card_data and card_data['image_url']:
+                if card_data and card_data.get('image_url'):
                     st.image(
                         card_data['image_url'],
-                        caption=clean_name,
+                        caption=card_data['name'],
                         use_column_width=True
                     )
                 else:
                     st.markdown(f"**{clean_name}**\n_(imagem não encontrada)_")
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
