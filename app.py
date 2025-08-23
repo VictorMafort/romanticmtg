@@ -23,24 +23,28 @@ import pandas as pd
 import altair as alt
 
 # =========================================================
-# CSS da aba 1 — Botões centralizados e compactos
+# CSS da aba 1 — Botões centralizados na mesma linha
 # =========================================================
 st.markdown("""
     <style>
         .aba1-btn-row {
-            display: flex;
+            display: flex !important;
             justify-content: center;
-            gap: 6px;                /* espaço entre botões */
+            align-items: center;
+            gap: 6px;
             margin-top: 4px;
-            flex-wrap: nowrap;       /* impede quebra de linha */
+            flex-wrap: nowrap;
         }
         .aba1-btn-row button {
-            white-space: nowrap;     /* mantém texto em uma única linha */
+            display: inline-block !important; /* força lado a lado */
+            width: auto !important;           /* remove largura fixa */
+            white-space: nowrap;
             font-size: 14px;
             padding: 2px 8px;
         }
     </style>
 """, unsafe_allow_html=True)
+
 
 
 # =========================================================
@@ -308,7 +312,7 @@ with tab1:
                     card_ph = st.empty()
                     card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1"), unsafe_allow_html=True)
 
-                    # Linha de botões centralizados para ajustes
+                    # Linha de botões centralizados e lado a lado
                     st.markdown("<div class='aba1-btn-row'>", unsafe_allow_html=True)
                     clicked = False
                     if st.button("−4", key=f"{base_key}_m4"):
@@ -682,6 +686,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
