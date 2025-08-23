@@ -579,23 +579,34 @@ with tab4:
 # =========================
 # Aba 5 - Banlist com imagens (busca flexível)
 # =========================
-
 with tab5:
     st.subheader("⛔ Cartas Banidas")
 
     if ban_list:
-        cols = st.columns(4)  # Ajuste o número de colunas conforme desejar
+        cols = st.columns(4)  # Ajuste o número de colunas
         for idx, card in enumerate(sorted(ban_list)):
             clean_name = card.strip()
-            card_data = fetch_card_data(clean_name)
-            with cols[idx % 4]:
-                if card_data and card_data.get('image_url'):
-                    st.image(
-                        card_data['image_url'],
-                        use_column_width=True
-                    )
+
+            # Busca usando fuzzy para garantir retorno
+            import requests
+            from urllib.parse import quote
+            url = f"https://api.scryfall.com/cards/named?fuzzy={quote(clean_name)}"
+            resp = requests.get(url)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                if "image_uris" in data:
+                    img_url = data["image_uris"]["normal"]
+                elif "card_faces" in data:
+                    img_url = data["card_faces"][0]["image_uris"]["normal"]
                 else:
-                    st.text(clean_name)  # Fallback, mas sem legenda, se quiser pode remover também
+                    img_url = None
+            else:
+                img_url = None
+
+            with cols[idx % 4]:
+                if img_url:
+                    st.image(img_url, use_column_width=True)
     else:
         st.info("Nenhuma carta banida no momento.")
 
