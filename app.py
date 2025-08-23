@@ -22,20 +22,21 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 # =========================================================
-# CSS global — centralização dos botões do Deckbuilder
+# CSS global — centralização dos botões no Deckbuilder
 # =========================================================
 st.markdown("""
     <style>
         .rf-btn-row {
             display: flex;
-            justify-content: center;
-            gap: 8px;
+            justify-content: center; /* centraliza horizontal */
+            gap: 8px;                /* espaço entre os botões */
             margin-top: 6px;
         }
         .rf-btn-row button {
             padding: 2px 8px;
             font-size: 16px;
             cursor: pointer;
+            height: 32px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -332,7 +333,7 @@ with tab2:
             st.success("Deck adicionado na Aba 3.")
 
 # =====================================================================
-# TAB 3 — Deckbuilder com 3 colunas fixas
+# TAB 3 — Deckbuilder (artes) — 3 colunas fixas + botões centralizados
 # =====================================================================
 with tab3:
     st.subheader("🧙‍♂️ Seu Deck — artes por tipo")
@@ -420,7 +421,7 @@ with tab3:
                             unsafe_allow_html=True
                         )
 
-                        # Botões centralizados via CSS
+                        # Botões lado a lado centralizados
                         st.markdown("<div class='rf-btn-row'>", unsafe_allow_html=True)
                         clicked = False
                         if st.button("➖", key=f"m1_{sec}_{i}_{name}"):
@@ -439,7 +440,6 @@ with tab3:
                             )
 
             st.markdown("---")
-
 
 # =====================================================================
 # TAB 4 — Análise (preguiçosa)
@@ -647,6 +647,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
