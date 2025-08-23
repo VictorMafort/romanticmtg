@@ -21,8 +21,30 @@ import requests
 import streamlit as st
 import pandas as pd
 import altair as alt
+
 # =========================================================
-# CSS global — centralização dos botões no Deckbuilder
+# CSS da aba 1 — Botões centralizados e compactos
+# =========================================================
+st.markdown("""
+    <style>
+        .aba1-btn-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;                /* espaço entre botões */
+            margin-top: 4px;
+            flex-wrap: nowrap;       /* impede quebra de linha */
+        }
+        .aba1-btn-row button {
+            white-space: nowrap;     /* mantém texto em uma única linha */
+            font-size: 14px;
+            padding: 2px 8px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+
+# =========================================================
+# CSS da aba 3 — centralização dos botões no Deckbuilder
 # =========================================================
 st.markdown("""
     <style>
@@ -277,25 +299,34 @@ with tab1:
                 with cols[j]:
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
                     qty = st.session_state.deck.get(name, 0)
+
                     label = "Banned" if status_type == "danger" else ("Not Legal" if status_type == "warning" else "Legal")
                     chip_class = "" if status_type == "success" else (" rf-chip-danger" if status_type == "danger" else " rf-chip-warning")
                     legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
                     badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
+
                     card_ph = st.empty()
                     card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1"), unsafe_allow_html=True)
 
-                    bcols = st.columns([1,1,1,1,1,1], gap="small")
-                    clicked=False
-                    if bcols[1].button("−4", key=f"{base_key}_m4"):
-                        remove_card(name,4); clicked=True
-                    if bcols[2].button("−1", key=f"{base_key}_m1"):
-                        remove_card(name,1); clicked=True
-                    if bcols[3].button("+1", key=f"{base_key}_p1"):
-                        add_card(name,1); clicked=True
-                    if bcols[4].button("+4", key=f"{base_key}_p4"):
-                        add_card(name,4); clicked=True
+                    # Linha de botões centralizados para ajustes
+                    st.markdown("<div class='aba1-btn-row'>", unsafe_allow_html=True)
+                    clicked = False
+                    if st.button("−4", key=f"{base_key}_m4"):
+                        remove_card(name, 4)
+                        clicked = True
+                    if st.button("−1", key=f"{base_key}_m1"):
+                        remove_card(name, 1)
+                        clicked = True
+                    if st.button("+1", key=f"{base_key}_p1"):
+                        add_card(name, 1)
+                        clicked = True
+                    if st.button("+4", key=f"{base_key}_p4"):
+                        add_card(name, 4)
+                        clicked = True
+                    st.markdown("</div>", unsafe_allow_html=True)
+
                     if clicked:
-                        qty2 = st.session_state.deck.get(name,0)
+                        qty2 = st.session_state.deck.get(name, 0)
                         card_ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed1"), unsafe_allow_html=True)
 
 # =====================================================================
@@ -651,6 +682,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
