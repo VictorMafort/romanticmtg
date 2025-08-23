@@ -579,10 +579,7 @@ with tab4:
 # =========================
 # Tab 5 - Banlist com Imagens
 # =========================
-# =========================
-# Tab 4 - Banlist com Imagens
-# =========================
-with tab4:
+with tab5:
     st.subheader("⛔ Cartas Banidas")
 
     if ban_list:
@@ -599,4 +596,5 @@ with tab4:
                 st.markdown(f"- **{card}** (imagem não encontrada)")
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
