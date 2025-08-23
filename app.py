@@ -23,10 +23,11 @@ import pandas as pd
 import altair as alt
 
 # =========================================================
-# CSS da aba 1 — Botões centralizados na mesma linha
+# CSS da aba 1 — Botões centralizados + Cartas tamanho fixo
 # =========================================================
 st.markdown("""
     <style>
+        /* Botões centralizados na mesma linha */
         .aba1-btn-row {
             display: flex !important;
             justify-content: center;
@@ -42,8 +43,17 @@ st.markdown("""
             font-size: 14px;
             padding: 2px 8px;
         }
+
+        /* Cartas da aba 1 com tamanho fixo, igual aba 3 */
+        .rf-fixed1-aba1 img {
+            width: 100px;       /* largura fixa */
+            height: 140px;      /* altura fixa */
+            object-fit: cover;  /* recorta mantendo proporção */
+        }
     </style>
 """, unsafe_allow_html=True)
+
+
 
 
 
@@ -280,6 +290,7 @@ def html_card(img_url: str, overlay_html: str, qty: int, extra_cls: str = "", ov
     </div>
     """
 
+
 # =====================================================================
 # TAB 1 — Sugestões
 # =====================================================================
@@ -310,9 +321,10 @@ with tab1:
                     badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
 
                     card_ph = st.empty()
-                    card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1"), unsafe_allow_html=True)
+                    # Classe com tamanho fixo aplicado
+                    card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1-aba1"), unsafe_allow_html=True)
 
-                    # Botões lado a lado com columns (estável no Streamlit)
+                    # Botões lado a lado usando columns
                     bcols = st.columns([1, 1, 1, 1], gap="small")
                     clicked = False
                     with bcols[0]:
@@ -330,7 +342,8 @@ with tab1:
 
                     if clicked:
                         qty2 = st.session_state.deck.get(name, 0)
-                        card_ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed1"), unsafe_allow_html=True)
+                        card_ph.markdown(html_card(img, badge, qty2, extra_cls="rf-fixed1-aba1"), unsafe_allow_html=True)
+
 
 # =====================================================================
 # TAB 2 — Decklist Checker
@@ -685,6 +698,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
