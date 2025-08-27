@@ -98,7 +98,38 @@ allowed_sets = {
     "10E","LRW","MOR","SHM","EVE","ALA","CON","ARB","M10","ZEN","WWK","ROE","M11","SOM","MBS","NPH",
     "M12","ISD","DKA","AVR","M13",
 }
-ban_list = {"Gitaxian Probe","Mental Misstep","Blazing Shoal","Skullclamp"}
+ban_list = {
+    "Gitaxian Probe",
+    "Mental Misstep",
+    "Blazing Shoal",
+    "Skullclamp",
+    "Ancestral Vision",
+    "Ancient Den",
+    "Bitterblossom",
+    "Chrome Mox",
+    "Dark Depths",
+    "Dread Return",
+    "Glimpse of Nature",
+    "Golgari Grave-Troll",
+    "Great Furnace",
+    "Hypergenesis",
+    "Jace, the Mind Sculptor",
+    "Seat of the Synod",
+    "Sensei's Divining Top",
+    "Stoneforge Mystic",
+    "Sword of the Meek",
+    "Tree of Tales",
+    "Umezawa's Jitte",
+    "Vault of Whispers",
+    "Cloudpost",
+    "Green Sun's Zenith",
+    "Ponder",
+    "Preordain",
+    "Rite of Flame",
+    "Punishing Fire",
+    "Wild Nacatl"
+}
+
 
 # ===== Estado =====
 if 'deck' not in st.session_state: st.session_state.deck = {}
@@ -698,6 +729,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
