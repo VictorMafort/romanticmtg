@@ -340,7 +340,9 @@ with tab1:
 
     if thumbs:
         for i in range(0, len(thumbs), COLS_TAB1):
-            cols = st.columns(min(COLS_TAB1, len(thumbs) - i))
+            # 🔧 Fix: sempre crie 3 colunas, mesmo na última linha
+            cols = st.columns(COLS_TAB1, gap="small")
+
             for j, (name, img, status_text, status_type) in enumerate(thumbs[i:i+COLS_TAB1]):
                 with cols[j]:
                     base_key = f"t1_{i}_{j}_{re.sub(r'[^A-Za-z0-9]+','_',name)}"
@@ -348,14 +350,14 @@ with tab1:
 
                     label = "Banned" if status_type == "danger" else ("Not Legal" if status_type == "warning" else "Legal")
                     chip_class = "" if status_type == "success" else (" rf-chip-danger" if status_type == "danger" else " rf-chip-warning")
-                    legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
-                    badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
+                    legal_chip = f"&lt;span class='rf-legal-chip{chip_class}'&gt;{_html.escape(label)}&lt;/span&gt;"
+                    badge = f"&lt;div class='rf-name-badge'&gt;{legal_chip}&lt;/div&gt;"
 
                     card_ph = st.empty()
-                    # Classe com tamanho fixo aplicado
+                    # Classe com tamanho fixo aplicado (mantida)
                     card_ph.markdown(html_card(img, badge, qty, extra_cls="rf-fixed1-aba1"), unsafe_allow_html=True)
 
-                    # Botões lado a lado usando columns
+                    # Botões lado a lado
                     bcols = st.columns([1, 1, 1, 1], gap="small")
                     clicked = False
                     with bcols[0]:
@@ -729,6 +731,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
