@@ -350,8 +350,10 @@ with tab1:
 
                     label = "Banned" if status_type == "danger" else ("Not Legal" if status_type == "warning" else "Legal")
                     chip_class = "" if status_type == "success" else (" rf-chip-danger" if status_type == "danger" else " rf-chip-warning")
-                    legal_chip = f"&lt;span class='rf-legal-chip{chip_class}'&gt;{_html.escape(label)}&lt;/span&gt;"
-                    badge = f"&lt;div class='rf-name-badge'&gt;{legal_chip}&lt;/div&gt;"
+
+                    # 🔧 Use tags reais; escape apenas o texto do rótulo
+                    legal_chip = f"<span class='rf-legal-chip{chip_class}'>{_html.escape(label)}</span>"
+                    badge = f"<div class='rf-name-badge'>{legal_chip}</div>"
 
                     card_ph = st.empty()
                     # Classe com tamanho fixo aplicado (mantida)
@@ -731,6 +733,7 @@ with tab5:
                     st.image(img_url, use_container_width=True)  # <- atualizado
     else:
         st.info("Nenhuma carta banida no momento.")
+
 
 
 
